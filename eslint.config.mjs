@@ -21,6 +21,7 @@ export default tseslint.config(
       "static/**",
       "templates/**",
       "tests/**",
+      "scripts/**",
     ],
   },
   eslint.configs.recommended,

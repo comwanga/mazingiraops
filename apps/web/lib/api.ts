@@ -156,7 +156,7 @@ export async function fetchMe(): Promise<MeResponse["user"]> {
       setCsrfToken(result.user.csrfToken);
     }
     return result.user;
-  } catch (err) {
+  } catch (_err) {
     if (typeof window !== "undefined") {
       const stored = window.sessionStorage.getItem("mock_auth_user");
       if (stored) {

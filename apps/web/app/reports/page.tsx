@@ -260,7 +260,7 @@ export default function ReportsPage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">MAZINGIRA OPS · REPORTS</p>
           <h1>Reports</h1>

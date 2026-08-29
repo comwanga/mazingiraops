@@ -19,7 +19,7 @@ export default function Home() {
             Sign in
           </Link>
           <Link className="secondary-link" href="/register">
-            Request access
+            Sign up / Request access
           </Link>
         </div>
       </section>

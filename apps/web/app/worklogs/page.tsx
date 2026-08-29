@@ -258,7 +258,7 @@ export default function WorkLogsPage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">MAZINGIRA OPS · WORK OPERATIONS</p>
           <h1>Work logs</h1>

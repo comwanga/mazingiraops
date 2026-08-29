@@ -10,6 +10,7 @@ export function DashNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<(AuthUser & { capabilities: string[] }) | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -23,6 +24,11 @@ export function DashNav() {
     };
   }, []);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   async function onLogout() {
     try {
       await logout();
@@ -34,27 +40,55 @@ export function DashNav() {
 
   if (!user) return <span className="nav-loading" aria-hidden="true" />;
 
+  const navItems = visibleNavigation(user.capabilities);
+
   return (
     <div className="dash-navigation">
-      <nav className="dash-nav" aria-label="Primary">
-        {visibleNavigation(user.capabilities).map((item) => (
+      <button
+        type="button"
+        className="mobile-nav-toggle"
+        aria-expanded={mobileMenuOpen}
+        aria-controls="dash-primary-nav"
+        aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+      >
+        <span className="hamburger-icon" aria-hidden="true" />
+        <span className="toggle-text">{mobileMenuOpen ? "Close" : "Menu"}</span>
+      </button>
+
+      <nav
+        id="dash-primary-nav"
+        className={`dash-nav ${mobileMenuOpen ? "is-open" : ""}`}
+        aria-label="Primary"
+      >
+        {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             aria-current={pathname === item.href ? "page" : undefined}
+            onClick={() => setMobileMenuOpen(false)}
           >
             {item.label}
           </Link>
         ))}
       </nav>
+
       <div className="account-menu" aria-label="Account controls">
-        <Link href="/account/password" title={user.email}>
-          {user.displayName}
+        <Link href="/account/password" title={user.email} className="account-user-link">
+          <span className="user-avatar" aria-hidden="true">
+            {user.displayName.charAt(0).toUpperCase()}
+          </span>
+          <span className="user-name">{user.displayName}</span>
         </Link>
-        <button type="button" className="link-btn" onClick={() => void onLogout()}>
+        <button
+          type="button"
+          className="link-btn sign-out-btn"
+          onClick={() => void onLogout()}
+        >
           Sign out
         </button>
       </div>
     </div>
   );
 }
+

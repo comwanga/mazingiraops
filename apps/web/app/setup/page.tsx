@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { StatusMessages } from "@/components/StatusMessages";
 import { apiErrorMessage, bootstrapOwner } from "@/lib/api";
 
@@ -79,14 +80,15 @@ export default function SetupPage() {
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               required
             />
-            <label htmlFor="password">Password</label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
-              autoComplete="new-password"
+              name="password"
+              label="Password"
               value={form.password}
-              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              onChange={(val) => setForm({ ...form, password: val })}
+              autoComplete="new-password"
               minLength={12}
+              showStrengthMeter={true}
               required
             />
             <StatusMessages error={error} />

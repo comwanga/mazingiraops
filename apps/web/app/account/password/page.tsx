@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { ApiError, apiErrorMessage, changePassword, fetchMe } from "@/lib/api";
 import { StatusMessages } from "@/components/StatusMessages";
 
@@ -61,35 +62,39 @@ export default function ChangePasswordPage() {
         <p className="subtitle">Choose a strong password before continuing.</p>
 
         <form className="auth-form" onSubmit={onSubmit}>
-          <label htmlFor="current">Current password</label>
-          <input
+          <PasswordInput
             id="current"
-            type="password"
-            autoComplete="current-password"
+            name="current"
+            label="Current password"
             value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
+            onChange={setCurrentPassword}
+            autoComplete="current-password"
             required
           />
-          <label htmlFor="new">New password</label>
-          <input
+
+          <PasswordInput
             id="new"
-            type="password"
-            autoComplete="new-password"
-            minLength={12}
+            name="new"
+            label="New password"
             value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            required
-          />
-          <label htmlFor="confirm">Confirm new password</label>
-          <input
-            id="confirm"
-            type="password"
+            onChange={setNewPassword}
             autoComplete="new-password"
             minLength={12}
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
+            showStrengthMeter={true}
             required
           />
+
+          <PasswordInput
+            id="confirm"
+            name="confirm"
+            label="Confirm new password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+            minLength={12}
+            required
+          />
+
           <StatusMessages error={error} />
           <button type="submit" disabled={submitting}>
             {submitting ? "Saving..." : "Change password"}

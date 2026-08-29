@@ -30,18 +30,17 @@ import {
 } from "@/lib/api";
 
 const ROLE_OPTIONS: Array<{ code: RoleCode; label: string }> = [
-  { code: "WARD_OFFICER", label: "Ward officer" },
-  { code: "SUBCOUNTY_REVIEWER", label: "Subcounty reviewer" },
-  { code: "CHIEF_SUBCOUNTY_OFFICER", label: "Chief subcounty officer" },
-  { code: "ASSISTANT_DIRECTOR", label: "Assistant director" },
-  { code: "DEPUTY_DIRECTOR", label: "Deputy director" },
-  { code: "DIRECTOR", label: "Director" },
-  { code: "HR_VIEWER", label: "HR viewer" },
-  { code: "READ_ONLY", label: "Read-only" },
+  { code: "WARD_OFFICER", label: "Ward Environment Officer (Ward-level)" },
+  { code: "SUBCOUNTY_REVIEWER", label: "Sub-County Environment Officer (Subcounty-level)" },
+  { code: "ASSISTANT_DIRECTOR", label: "Assistant Director of Environment (County-level)" },
+  { code: "DEPUTY_DIRECTOR", label: "Deputy Director of Environment (County-level)" },
+  { code: "DIRECTOR", label: "Director of Environment (County-level)" },
+  { code: "HR_VIEWER", label: "HR / Personnel Viewer" },
+  { code: "READ_ONLY", label: "Read-Only Observer / Audit Reviewer" },
 ];
 
 const USER_ROLE_OPTIONS: Array<{ code: RoleCode; label: string }> = [
-  { code: "SYSTEM_ADMIN", label: "System administrator" },
+  { code: "SYSTEM_ADMIN", label: "System Administrator (County Superuser)" },
   ...ROLE_OPTIONS,
 ];
 
@@ -294,7 +293,7 @@ export default function AccessRequestsPage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">MAZINGIRA OPS · USER ACCESS</p>
           <h1>Access requests</h1>

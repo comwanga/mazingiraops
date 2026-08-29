@@ -201,7 +201,7 @@ export default function AbsencesPage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">MAZINGIRA OPS · ABSENCE MANAGEMENT</p>
           <h1>Absences</h1>

@@ -242,7 +242,7 @@ export default function AttendancePage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title"><p className="eyebrow">MAZINGIRA OPS · ATTENDANCE</p><h1>Attendance</h1></div>
         <DashNav />
       </header>

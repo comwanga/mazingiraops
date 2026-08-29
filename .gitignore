@@ -1,9 +1,4 @@
-# Python (legacy)
-.venv/
-.packages/
-__pycache__/
-.pytest_cache/
-*.pyc
+# Data & uploads
 data/*.db
 data/uploads/*
 !data/uploads/.gitkeep
@@ -13,6 +8,7 @@ apps/api/data/*
 !apps/api/data/.gitkeep
 apps/api/data/documents/*
 !apps/api/data/documents/.gitkeep
+
 
 # Node / monorepo
 node_modules/

@@ -1,5 +1,0 @@
-{% extends "base.html" %}
-{% block title %}My Account · Makina Ward Operations{% endblock %}
-{% block body %}
-<main class="checkin-shell"><div class="mini-brand"><div class="county-mark">NCC</div><span>MAKINA WARD<br><strong>My Account</strong></span></div><section class="checkin-card"><a href="/">← Dashboard</a><p class="eyebrow">ACCOUNT SETTINGS</p><h1>Your details</h1>{% if error %}<div class="notice">{{ error }}</div>{% endif %}<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf }}"><label>Full name<input name="display_name" value="{{ auth.user.display_name }}" minlength="3" required></label><label>Sign-in email<input type="email" name="email" value="{{ auth.user.email }}" required></label><label>Current password<input type="password" name="current_password" autocomplete="current-password" required></label><label>New password <small>Leave blank to keep the current password</small><input type="password" name="new_password" minlength="12" autocomplete="new-password"></label><button class="button full">Save account</button></form></section></main>
-{% endblock %}

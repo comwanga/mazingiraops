@@ -1,9 +1,11 @@
 # Open Business-Rule Questions
 
-Status: **Phase 0** — require confirmation before implementation proceeds.
+Status: **Open policy decisions** — the current implementation uses the pilot
+defaults documented below. Policy owners must confirm them before production
+rollout; changes may require schema, validation, retention, and procedure updates.
 
-These decisions are not blocking for the foundation phase, but must be
-confirmed before the corresponding domain phase is finalized.
+These decisions do not block technical verification, but they do block a fully
+approved production operating model.
 
 ## Attendance
 

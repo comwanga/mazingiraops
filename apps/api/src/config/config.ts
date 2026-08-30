@@ -31,6 +31,19 @@ const envSchema = z
   })
   .superRefine((env, ctx) => {
     if (env.APP_ENV === "production") {
+      if (!env.PUBLIC_BASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "PUBLIC_BASE_URL is required in production so generated check-in links use the public web application",
+          path: ["PUBLIC_BASE_URL"],
+        });
+      } else if (!env.PUBLIC_BASE_URL.startsWith("https://")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "PUBLIC_BASE_URL must use HTTPS in production",
+          path: ["PUBLIC_BASE_URL"],
+        });
+      }
       if (env.SECURE_COOKIES === undefined || env.SECURE_COOKIES !== "true") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

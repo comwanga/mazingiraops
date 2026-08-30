@@ -1,10 +1,12 @@
 # Migration Plan — Legacy → New Model
 
-Status: **Phase 0 proposal** (awaiting review).
+Status: **Tooling implemented; production execution awaits approval and a migration window.**
 
-Migration is **not** performed during initial development. This documents the
-mapping and the tooling that will be built in Phase 9. Synthetic/test copies
-are used before any real production migration.
+Migration is **never performed automatically by deployment**. The repository now
+contains the mapping, migrator, reconciliation paths, scripts, and automated
+tests described here. Run them against synthetic/test copies before any real
+production migration, then require an approved backup, dry-run report, migration
+window, and rollback decision.
 
 ## 1. Entity mapping
 

@@ -1,11 +1,16 @@
 import type { Metadata, Viewport } from "next";
 import { BrandBackground } from "@/components/BrandBackground";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { BRANDING } from "@/lib/branding";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MazingiraOps",
+  applicationName: "MazingiraOps",
+  title: {
+    default: "MazingiraOps",
+    template: "%s | MazingiraOps",
+  },
   description:
     "Multi-ward environment operations reporting",
   manifest: "/manifest.webmanifest",
@@ -33,11 +38,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
+        <a className="skip-link" href="#app-content">
+          Skip to main content
+        </a>
         <BrandBackground />
         <ServiceWorkerRegistration />
-        <div className="app-canvas">{children}</div>
+        <ThemeToggle />
+        <div className="app-canvas" id="app-content" tabIndex={-1}>
+          {children}
+        </div>
       </body>
     </html>
   );

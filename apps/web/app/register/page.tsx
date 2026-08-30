@@ -170,7 +170,7 @@ export default function RegisterPage() {
         requestedScopeId: selected.id,
       });
       setNotice(
-        "Your account registration was successfully submitted. An Administrator will review your request, and you will receive an official authentication email once approved.",
+        "Your access request was submitted. An administrator must verify your role and scope before you can sign in.",
       );
       setForm({ displayName: "", email: "", password: "", reason: "" });
     } catch (cause) {
@@ -188,14 +188,14 @@ export default function RegisterPage() {
         <h1>MazingiraOps</h1>
         <p className="subtitle">Create account & request operational access</p>
 
-        <div className="auth-switcher" role="tablist" aria-label="Authentication modes">
-          <Link href="/login" className="auth-tab" aria-selected="false">
+        <nav className="auth-switcher" aria-label="Account access">
+          <Link href="/login" className="auth-tab">
             Sign in
           </Link>
-          <button type="button" className="auth-tab active" aria-selected="true">
-            Sign up / Request access
-          </button>
-        </div>
+          <span className="auth-tab active" aria-current="page">
+            Request access
+          </span>
+        </nav>
 
         <form className="auth-form" onSubmit={onSubmit}>
           <label htmlFor="displayName">Full Name</label>
@@ -292,8 +292,8 @@ export default function RegisterPage() {
               ℹ
             </span>
             <p>
-              <strong>Admin Approval Required:</strong> Submissions are verified by System Admin.
-              You will receive an email authentication notification when your account is activated.
+              <strong>Approval required:</strong> An administrator will verify your identity,
+              requested role and operational scope. Approval does not happen automatically.
             </p>
           </div>
 

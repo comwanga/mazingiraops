@@ -6,6 +6,7 @@ const PROD_S3 = {
   S3_ACCESS_KEY_ID: "test-key",
   S3_SECRET_ACCESS_KEY: "test-secret",
 };
+const PROD_BASE = { PUBLIC_BASE_URL: "https://mazingira.example.go.ke" };
 
 describe("loadConfig", () => {
   it("loads a valid development configuration with defaults", () => {
@@ -29,6 +30,7 @@ describe("loadConfig", () => {
       loadConfig({
         DATABASE_URL: "postgresql://u:p@localhost:5432/db",
         APP_ENV: "production",
+        ...PROD_BASE,
         ...PROD_S3,
       }),
     ).toThrow();
@@ -37,6 +39,7 @@ describe("loadConfig", () => {
         DATABASE_URL: "postgresql://u:p@localhost:5432/db",
         APP_ENV: "production",
         SECURE_COOKIES: "true",
+        ...PROD_BASE,
         ...PROD_S3,
       }),
     ).not.toThrow();
@@ -48,6 +51,7 @@ describe("loadConfig", () => {
         DATABASE_URL: "postgresql://u:p@localhost:5432/db",
         APP_ENV: "production",
         SECURE_COOKIES: "true",
+        ...PROD_BASE,
       }),
     ).toThrow(/S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required in production/);
   });
@@ -68,9 +72,23 @@ describe("loadConfig", () => {
       DATABASE_URL: "postgresql://u:p@localhost:5432/db",
       APP_ENV: "production",
       SECURE_COOKIES: "true",
+      ...PROD_BASE,
       ...PROD_S3,
     });
     expect(config.storage.configured).toBe(true);
     expect(config.storage.bucket).toBe("ward-ops-evidence");
+  });
+
+  it("requires an HTTPS public web URL in production", () => {
+    const base = {
+      DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+      APP_ENV: "production",
+      SECURE_COOKIES: "true",
+      ...PROD_S3,
+    };
+    expect(() => loadConfig(base)).toThrow(/PUBLIC_BASE_URL is required in production/);
+    expect(() => loadConfig({ ...base, PUBLIC_BASE_URL: "http://example.test" })).toThrow(
+      /PUBLIC_BASE_URL must use HTTPS in production/,
+    );
   });
 });

@@ -87,16 +87,6 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   return body as T;
 }
 
-import {
-  INITIAL_AUDIT_EVENTS,
-  INITIAL_DASHBOARD,
-  INITIAL_PERMISSION_CATALOG,
-  INITIAL_STAFF,
-  INITIAL_USERS,
-  INITIAL_WORK_LOGS,
-  TEST_USERS,
-} from "./mock-data";
-
 export interface AuthUser {
   id: string;
   email: string;
@@ -124,66 +114,27 @@ export interface LoginResponse {
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
-  try {
-    const result = await apiFetch<LoginResponse>("/auth/login", {
-      method: "POST",
-      body: { email, password },
-    });
-    setCsrfToken(result.csrfToken);
-    return result.user;
-  } catch (err) {
-    const testAccount = TEST_USERS[email.toLowerCase().trim()];
-    if (testAccount && (testAccount.password === password || password === "Admin@Nairobi2026!Ops" || password.length >= 6)) {
-      const mockSession = {
-        ...testAccount.session.user,
-        capabilities: testAccount.session.capabilities,
-        csrfToken: "mock-dev-csrf-token",
-      };
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem("mock_auth_user", JSON.stringify(mockSession));
-      }
-      setCsrfToken("mock-dev-csrf-token");
-      return testAccount.session.user;
-    }
-    throw err;
-  }
+  const result = await apiFetch<LoginResponse>("/auth/login", {
+    method: "POST",
+    body: { email, password },
+  });
+  setCsrfToken(result.csrfToken);
+  return result.user;
 }
 
 export async function fetchMe(): Promise<MeResponse["user"]> {
-  try {
-    const result = await apiFetch<MeResponse>("/auth/me");
-    if (result.user) {
-      setCsrfToken(result.user.csrfToken);
-    }
-    return result.user;
-  } catch {
-    if (typeof window !== "undefined") {
-      const stored = window.sessionStorage.getItem("mock_auth_user");
-      if (stored) {
-        try {
-          const user = JSON.parse(stored);
-          setCsrfToken("mock-dev-csrf-token");
-          return user;
-        } catch {
-          // ignore parse error
-        }
-      }
-    }
-    return null;
+  const result = await apiFetch<MeResponse>("/auth/me");
+  if (result.user) {
+    setCsrfToken(result.user.csrfToken);
   }
+  return result.user;
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await apiFetch("/auth/logout", { method: "POST" });
-  } catch {
-    // fallback ignore
-  } finally {
-    setCsrfToken(null);
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem("mock_auth_user");
-      navigator.serviceWorker?.controller?.postMessage({ type: "PURGE_SESSION_CACHE" });
-    }
+  await apiFetch("/auth/logout", { method: "POST" });
+  setCsrfToken(null);
+  if (typeof navigator !== "undefined") {
+    navigator.serviceWorker?.controller?.postMessage({ type: "PURGE_SESSION_CACHE" });
   }
 }
 
@@ -191,22 +142,10 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  try {
-    await apiFetch("/auth/change-password", {
-      method: "POST",
-      body: { currentPassword, newPassword },
-    });
-  } catch {
-    // Local dev mock success
-    if (typeof window !== "undefined") {
-      const stored = window.sessionStorage.getItem("mock_auth_user");
-      if (stored) {
-        const user = JSON.parse(stored);
-        user.mustChangePassword = false;
-        window.sessionStorage.setItem("mock_auth_user", JSON.stringify(user));
-      }
-    }
-  }
+  await apiFetch("/auth/change-password", {
+    method: "POST",
+    body: { currentPassword, newPassword },
+  });
 }
 
 export interface DashboardSnapshot {
@@ -231,11 +170,7 @@ export interface DashboardSnapshot {
 }
 
 export async function fetchDashboard(): Promise<DashboardSnapshot> {
-  try {
-    return await apiFetch<DashboardSnapshot>("/dashboard");
-  } catch {
-    return INITIAL_DASHBOARD;
-  }
+  return apiFetch<DashboardSnapshot>("/dashboard");
 }
 
 export async function requestAccess(input: {
@@ -266,228 +201,8 @@ export interface PublicOrganisationTree {
   }>;
 }
 
-export const FALLBACK_NAIROBI_ORGANISATIONS: PublicOrganisationTree = {
-  counties: [
-    {
-      id: "county_nairobi",
-      code: "NCC",
-      name: "Nairobi City County",
-      subcounties: [
-        {
-          id: "subcounty_westlands",
-          code: "WESTLANDS",
-          name: "Westlands",
-          wards: [
-            { id: "ward_kitisuru", code: "KITISURU", name: "Kitisuru" },
-            { id: "ward_parklands_highridge", code: "PARKLANDS_HIGHRIDGE", name: "Parklands/Highridge" },
-            { id: "ward_karura", code: "KARURA", name: "Karura" },
-            { id: "ward_kangemi", code: "KANGEMI", name: "Kangemi" },
-            { id: "ward_mountain_view", code: "MOUNTAIN_VIEW", name: "Mountain View" },
-          ],
-        },
-        {
-          id: "subcounty_dagoretti_north",
-          code: "DAGORETTI_NORTH",
-          name: "Dagoretti North",
-          wards: [
-            { id: "ward_kilimani", code: "KILIMANI", name: "Kilimani" },
-            { id: "ward_kawangware", code: "KAWANGWARE", name: "Kawangware" },
-            { id: "ward_gatina", code: "GATINA", name: "Gatina" },
-            { id: "ward_kileleshwa", code: "KILELESHWA", name: "Kileleshwa" },
-            { id: "ward_kabiro", code: "KABIRO", name: "Kabiro" },
-          ],
-        },
-        {
-          id: "subcounty_dagoretti_south",
-          code: "DAGORETTI_SOUTH",
-          name: "Dagoretti South",
-          wards: [
-            { id: "ward_mutuini", code: "MUTUINI", name: "Mutu-ini" },
-            { id: "ward_ngando", code: "NGANDO", name: "Ngando" },
-            { id: "ward_riruta", code: "RIRUTA", name: "Riruta" },
-            { id: "ward_uthiru_ruthimitu", code: "UTHIRU_RUTHIMITU", name: "Uthiru/Ruthimitu" },
-            { id: "ward_waithaka", code: "WAITHAKA", name: "Waithaka" },
-          ],
-        },
-        {
-          id: "subcounty_langata",
-          code: "LANGATA",
-          name: "Lang'ata",
-          wards: [
-            { id: "ward_karen", code: "KAREN", name: "Karen" },
-            { id: "ward_nairobi_west", code: "NAIROBI_WEST", name: "Nairobi West" },
-            { id: "ward_mugumoini", code: "MUGUMOINI", name: "Mugumo-ini" },
-            { id: "ward_south_c", code: "SOUTH_C", name: "South C" },
-            { id: "ward_nyayo_highrise", code: "NYAYO_HIGHRIDGE", name: "Nyayo/Highrise" },
-          ],
-        },
-        {
-          id: "subcounty_kibra",
-          code: "KIBRA",
-          name: "Kibra",
-          wards: [
-            { id: "ward_lainisaba", code: "LAINI_SABA", name: "Laini Saba" },
-            { id: "ward_lindi", code: "LINDI", name: "Lindi" },
-            { id: "ward_makina", code: "MAKINA", name: "Makina" },
-            { id: "ward_woodley", code: "WOODLEY_KENYATTA_GOLF", name: "Woodley/Kenyatta Golf Course" },
-            { id: "ward_sarangombe", code: "SARANGOMBE", name: "Sarang'ombe" },
-          ],
-        },
-        {
-          id: "subcounty_roysambu",
-          code: "ROYSAMBU",
-          name: "Roysambu",
-          wards: [
-            { id: "ward_githurai", code: "GITHURAI", name: "Githurai" },
-            { id: "ward_kahawa_west", code: "KAHAWA_WEST", name: "Kahawa West" },
-            { id: "ward_zimmerman", code: "ZIMMERMAN", name: "Zimmerman" },
-            { id: "ward_roysambu", code: "ROYSAMBU_WARD", name: "Roysambu" },
-            { id: "ward_kahawa", code: "KAHAWA", name: "Kahawa" },
-          ],
-        },
-        {
-          id: "subcounty_kasarani",
-          code: "KASARANI",
-          name: "Kasarani",
-          wards: [
-            { id: "ward_clay_city", code: "CLAY_CITY", name: "Clay City" },
-            { id: "ward_mwiki", code: "MWIKI", name: "Mwiki" },
-            { id: "ward_kasarani", code: "KASARANI_WARD", name: "Kasarani" },
-            { id: "ward_njiru", code: "NJIRU", name: "Njiru" },
-            { id: "ward_ruai", code: "RUAI", name: "Ruai" },
-          ],
-        },
-        {
-          id: "subcounty_ruaraka",
-          code: "RUARAKA",
-          name: "Ruaraka",
-          wards: [
-            { id: "ward_baba_dogo", code: "BABA_DOGO", name: "Baba Dogo" },
-            { id: "ward_utalii", code: "UTALII", name: "Utalii" },
-            { id: "ward_mathare_north", code: "MATHARE_NORTH", name: "Mathare North" },
-            { id: "ward_lucky_summer", code: "LUCKY_SUMMER", name: "Lucky Summer" },
-            { id: "ward_korogocho", code: "KOROGOCHO", name: "Korogocho" },
-          ],
-        },
-        {
-          id: "subcounty_embakasi_south",
-          code: "EMBAKASI_SOUTH",
-          name: "Embakasi South",
-          wards: [
-            { id: "ward_imara_daima", code: "IMARA_DAIMA", name: "Imara Daima" },
-            { id: "ward_kwa_njenga", code: "KWA_NJENGA", name: "Kwa Njenga" },
-            { id: "ward_kwa_reuben", code: "KWA_REUBEN", name: "Kwa Reuben" },
-            { id: "ward_pipeline", code: "PIPELINE", name: "Pipeline" },
-            { id: "ward_kware", code: "KWARE", name: "Kware" },
-          ],
-        },
-        {
-          id: "subcounty_embakasi_north",
-          code: "EMBAKASI_NORTH",
-          name: "Embakasi North",
-          wards: [
-            { id: "ward_kariobangi_north", code: "KARIOBANGI_NORTH", name: "Kariobangi North" },
-            { id: "ward_dandora_i", code: "DANDORA_I", name: "Dandora Area I" },
-            { id: "ward_dandora_ii", code: "DANDORA_II", name: "Dandora Area II" },
-            { id: "ward_dandora_iii", code: "DANDORA_III", name: "Dandora Area III" },
-            { id: "ward_dandora_iv", code: "DANDORA_IV", name: "Dandora Area IV" },
-          ],
-        },
-        {
-          id: "subcounty_embakasi_central",
-          code: "EMBAKASI_CENTRAL",
-          name: "Embakasi Central",
-          wards: [
-            { id: "ward_kayole_north", code: "KAYOLE_NORTH", name: "Kayole North" },
-            { id: "ward_kayole_central", code: "KAYOLE_CENTRAL", name: "Kayole Central" },
-            { id: "ward_kayole_south", code: "KAYOLE_SOUTH", name: "Kayole South" },
-            { id: "ward_komarock", code: "KOMAROCK", name: "Komarock" },
-            { id: "ward_matopeni_spring_valley", code: "MATOPENI_SPRING_VALLEY", name: "Matopeni/Spring Valley" },
-          ],
-        },
-        {
-          id: "subcounty_embakasi_east",
-          code: "EMBAKASI_EAST",
-          name: "Embakasi East",
-          wards: [
-            { id: "ward_upper_savanna", code: "UPPER_SAVANNA", name: "Upper Savanna" },
-            { id: "ward_lower_savanna", code: "LOWER_SAVANNA", name: "Lower Savanna" },
-            { id: "ward_embakasi", code: "EMBAKASI_WARD", name: "Embakasi" },
-            { id: "ward_utawala", code: "UTAWALA", name: "Utawala" },
-            { id: "ward_mihango", code: "MIHANGO", name: "Mihango" },
-          ],
-        },
-        {
-          id: "subcounty_embakasi_west",
-          code: "EMBAKASI_WEST",
-          name: "Embakasi West",
-          wards: [
-            { id: "ward_umoja_i", code: "UMOJA_I", name: "Umoja I" },
-            { id: "ward_umoja_ii", code: "UMOJA_II", name: "Umoja II" },
-            { id: "ward_mowlem", code: "MOWLEM", name: "Mowlem" },
-            { id: "ward_kariobangi_south", code: "KARIOBANGI_SOUTH", name: "Kariobangi South" },
-          ],
-        },
-        {
-          id: "subcounty_makadara",
-          code: "MAKADARA",
-          name: "Makadara",
-          wards: [
-            { id: "ward_maringo_hamza", code: "MARINGO_HAMZA", name: "Maringo/Hamza" },
-            { id: "ward_viwandani", code: "VIWANDANI", name: "Viwandani" },
-            { id: "ward_harambee", code: "HARAMBEE", name: "Harambee" },
-            { id: "ward_makongeni", code: "MAKONGENI", name: "Makongeni" },
-          ],
-        },
-        {
-          id: "subcounty_kamukunji",
-          code: "KAMUKUNJI",
-          name: "Kamukunji",
-          wards: [
-            { id: "ward_pumwani", code: "PUMWANI", name: "Pumwani" },
-            { id: "ward_eastleigh_north", code: "EASTLEIGH_NORTH", name: "Eastleigh North" },
-            { id: "ward_eastleigh_south", code: "EASTLEIGH_SOUTH", name: "Eastleigh South" },
-            { id: "ward_airbase", code: "AIRBASE", name: "Airbase" },
-            { id: "ward_california", code: "CALIFORNIA", name: "California" },
-          ],
-        },
-        {
-          id: "subcounty_starehe",
-          code: "STAREHE",
-          name: "Starehe",
-          wards: [
-            { id: "ward_nairobi_central", code: "NAIROBI_CENTRAL", name: "Nairobi Central" },
-            { id: "ward_ngara", code: "NGARA", name: "Ngara" },
-            { id: "ward_pangani", code: "PANGANI", name: "Pangani" },
-            { id: "ward_ziwani_kariokor", code: "ZIWANI_KARIOKOR", name: "Ziwani/Kariokor" },
-            { id: "ward_landimawe", code: "LANDIMAWE", name: "Landi Mawe" },
-            { id: "ward_nairobi_south", code: "NAIROBI_SOUTH", name: "Nairobi South" },
-          ],
-        },
-        {
-          id: "subcounty_mathare",
-          code: "MATHARE",
-          name: "Mathare",
-          wards: [
-            { id: "ward_hospital", code: "HOSPITAL", name: "Hospital" },
-            { id: "ward_mabatini", code: "MABATINI", name: "Mabatini" },
-            { id: "ward_huruma", code: "HURUMA", name: "Huruma" },
-            { id: "ward_ngei", code: "NGEI", name: "Ngei" },
-            { id: "ward_mlango_kubwa", code: "MLANGO_KUBWA", name: "Mlango Kubwa" },
-            { id: "ward_kiamaiko", code: "KIAMAIKO", name: "Kiamaiko" },
-          ],
-        },
-      ],
-    },
-  ],
-};
-
 export async function listPublicOrganisations(): Promise<PublicOrganisationTree> {
-  try {
-    return await apiFetch<PublicOrganisationTree>("/organisations/public");
-  } catch {
-    return FALLBACK_NAIROBI_ORGANISATIONS;
-  }
+  return apiFetch<PublicOrganisationTree>("/organisations/public");
 }
 
 export interface AccessRequest {
@@ -510,26 +225,18 @@ export interface AccessRequestDecision {
 }
 
 export async function listAccessRequests(): Promise<AccessRequest[]> {
-  try {
-    const result = await apiFetch<{ requests: AccessRequest[] }>("/users/access-requests");
-    return result.requests;
-  } catch {
-    return [];
-  }
+  const result = await apiFetch<{ requests: AccessRequest[] }>("/users/access-requests");
+  return result.requests;
 }
 
 export async function reviewAccessRequest(
   id: string,
   decision: AccessRequestDecision,
 ): Promise<void> {
-  try {
-    await apiFetch(`/users/access-requests/${encodeURIComponent(id)}/review`, {
-      method: "POST",
-      body: decision,
-    });
-  } catch {
-    // fallback success
-  }
+  await apiFetch(`/users/access-requests/${encodeURIComponent(id)}/review`, {
+    method: "POST",
+    body: decision,
+  });
 }
 
 export interface ManagedUserAssignment {
@@ -556,12 +263,8 @@ export interface UserAssignmentInput {
 }
 
 export async function listUsers(): Promise<ManagedUser[]> {
-  try {
-    const result = await apiFetch<{ users: ManagedUser[] }>("/users");
-    return result.users;
-  } catch {
-    return INITIAL_USERS;
-  }
+  const result = await apiFetch<{ users: ManagedUser[] }>("/users");
+  return result.users;
 }
 
 export async function updateUserAssignments(
@@ -593,11 +296,7 @@ export interface PermissionCatalog {
 }
 
 export async function fetchPermissionCatalog(): Promise<PermissionCatalog> {
-  try {
-    return await apiFetch<PermissionCatalog>("/users/permissions");
-  } catch {
-    return INITIAL_PERMISSION_CATALOG;
-  }
+  return apiFetch<PermissionCatalog>("/users/permissions");
 }
 
 export async function updateRoleCapabilities(roleCode: RoleCode, capabilities: string[]): Promise<void> {
@@ -648,21 +347,12 @@ export async function listAudit(query?: {
   pageSize?: number;
   action?: string;
 }): Promise<AuditListResult> {
-  try {
-    const params = new URLSearchParams();
-    if (query?.page !== undefined) params.set("page", String(query.page));
-    if (query?.pageSize !== undefined) params.set("pageSize", String(query.pageSize));
-    if (query?.action) params.set("action", query.action);
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    return await apiFetch<AuditListResult>(`/audit${suffix}`);
-  } catch {
-    return {
-      items: INITIAL_AUDIT_EVENTS,
-      page: 1,
-      pageSize: 25,
-      total: INITIAL_AUDIT_EVENTS.length,
-    };
-  }
+  const params = new URLSearchParams();
+  if (query?.page !== undefined) params.set("page", String(query.page));
+  if (query?.pageSize !== undefined) params.set("pageSize", String(query.pageSize));
+  if (query?.action) params.set("action", query.action);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<AuditListResult>(`/audit${suffix}`);
 }
 
 // -- Phase 3: staff -----------------------------------------------------------
@@ -678,19 +368,8 @@ export interface Ward extends WardRef {
 }
 
 export async function listWards(): Promise<Ward[]> {
-  try {
-    const result = await apiFetch<{ wards: Ward[] }>("/organisations/wards");
-    return result.wards;
-  } catch {
-    return [
-      { id: "ward_makina", code: "MAKINA", name: "Makina", subcountyId: "subcounty_kibra" },
-      { id: "ward_sarangombe", code: "SARANGOMBE", name: "Sarang'ombe", subcountyId: "subcounty_kibra" },
-      { id: "ward_lainisaba", code: "LAINISABA", name: "Laini Saba", subcountyId: "subcounty_kibra" },
-      { id: "ward_woodley", code: "WOODLEY", name: "Woodley/Kenyatta Golf Course", subcountyId: "subcounty_kibra" },
-      { id: "ward_kitisuru", code: "KITISURU", name: "Kitisuru", subcountyId: "subcounty_westlands" },
-      { id: "ward_kilimani", code: "KILIMANI", name: "Kilimani", subcountyId: "subcounty_dagoretti_north" },
-    ];
-  }
+  const result = await apiFetch<{ wards: Ward[] }>("/organisations/wards");
+  return result.wards;
 }
 
 export interface EmployeeProfile {
@@ -727,11 +406,7 @@ export interface CreateEmployeeInput {
 }
 
 export async function listStaff(): Promise<Employee[]> {
-  try {
-    return await apiFetch<Employee[]>("/staff");
-  } catch {
-    return INITIAL_STAFF;
-  }
+  return apiFetch<Employee[]>("/staff");
 }
 
 export async function createStaff(input: CreateEmployeeInput): Promise<Employee> {
@@ -902,21 +577,9 @@ export async function listAttendance(query?: AttendanceQuery): Promise<Attendanc
 }
 
 export async function fetchRoster(wardId: string, workDate?: string): Promise<RosterRow[]> {
-  try {
-    const params = new URLSearchParams({ wardId });
-    if (workDate) params.set("workDate", workDate);
-    return await apiFetch<RosterRow[]>(`/attendance/roster?${params.toString()}`);
-  } catch {
-    return INITIAL_STAFF.map((s) => ({
-      employee: { id: s.id, employeeNumber: s.employeeNumber, fullName: s.fullName },
-      status: "PRESENT",
-      detail: "Checked in via daily morning roll call",
-      manualEditable: true,
-      attendanceId: `att_${s.id}`,
-      sessionId: "sess_01",
-      correctionAllowed: true,
-    }));
-  }
+  const params = new URLSearchParams({ wardId });
+  if (workDate) params.set("workDate", workDate);
+  return apiFetch<RosterRow[]>(`/attendance/roster?${params.toString()}`);
 }
 
 export interface ManualAttendanceInput {
@@ -928,25 +591,17 @@ export interface ManualAttendanceInput {
 }
 
 export async function manualAttendance(input: ManualAttendanceInput): Promise<unknown> {
-  try {
-    return await apiFetch("/attendance/manual", { method: "POST", body: input });
-  } catch {
-    return { ok: true };
-  }
+  return apiFetch("/attendance/manual", { method: "POST", body: input });
 }
 
 export async function correctAttendance(
   id: string,
   input: { sessionId: string; status: string; reason: string },
 ): Promise<unknown> {
-  try {
-    return await apiFetch(`/attendance/${encodeURIComponent(id)}/corrections`, {
-      method: "POST",
-      body: input,
-    });
-  } catch {
-    return { ok: true };
-  }
+  return apiFetch(`/attendance/${encodeURIComponent(id)}/corrections`, {
+    method: "POST",
+    body: input,
+  });
 }
 
 export interface CheckInResponse {
@@ -1014,35 +669,12 @@ export async function listAbsences(query?: {
   status?: AbsenceStatus;
   employeeId?: string;
 }): Promise<Absence[]> {
-  try {
-    const params = new URLSearchParams();
-    if (query?.wardId) params.set("wardId", query.wardId);
-    if (query?.status) params.set("status", query.status);
-    if (query?.employeeId) params.set("employeeId", query.employeeId);
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    return await apiFetch<Absence[]>(`/absence-requests${suffix}`);
-  } catch {
-    return [
-      {
-        id: "abs_01",
-        employee: { id: "staff_02", employeeNumber: "ENV-MK-002", fullName: "Mary Wambui Kamau" },
-        wardId: "ward_makina",
-        kind: "ANNUAL_LEAVE",
-        startDate: "2026-08-28",
-        endDate: "2026-09-04",
-        returnDate: "2026-09-05",
-        reason: "Scheduled annual leave for family commitments",
-        status: "SUBMITTED",
-        version: 1,
-        submittedBy: "Makina Ward Officer",
-        reviewedBy: null,
-        reviewNote: null,
-        createdAt: "2026-08-25T08:00:00Z",
-        reviewedAt: null,
-        documents: [],
-      },
-    ];
-  }
+  const params = new URLSearchParams();
+  if (query?.wardId) params.set("wardId", query.wardId);
+  if (query?.status) params.set("status", query.status);
+  if (query?.employeeId) params.set("employeeId", query.employeeId);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<Absence[]>(`/absence-requests${suffix}`);
 }
 
 export async function createAbsence(input: CreateAbsenceInput): Promise<Absence> {
@@ -1155,16 +787,12 @@ export async function listWorkLogs(query?: {
   workDate?: string;
   status?: WorkLogStatus;
 }): Promise<WorkLog[]> {
-  try {
-    const params = new URLSearchParams();
-    if (query?.wardId) params.set("wardId", query.wardId);
-    if (query?.workDate) params.set("workDate", query.workDate);
-    if (query?.status) params.set("status", query.status);
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    return await apiFetch<WorkLog[]>(`/work-logs${suffix}`);
-  } catch {
-    return INITIAL_WORK_LOGS;
-  }
+  const params = new URLSearchParams();
+  if (query?.wardId) params.set("wardId", query.wardId);
+  if (query?.workDate) params.set("workDate", query.workDate);
+  if (query?.status) params.set("status", query.status);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<WorkLog[]>(`/work-logs${suffix}`);
 }
 
 export async function createWorkLog(input: CreateWorkLogInput): Promise<WorkLog> {
@@ -1428,132 +1056,28 @@ export interface ReportPeriodInput {
 }
 
 export async function fetchOrganisationTree(): Promise<OrganisationCounty[]> {
-  try {
-    const result = await apiFetch<{ counties: OrganisationCounty[] }>("/organisations");
-    return result.counties;
-  } catch {
-    return FALLBACK_NAIROBI_ORGANISATIONS.counties as unknown as OrganisationCounty[];
-  }
+  const result = await apiFetch<{ counties: OrganisationCounty[] }>("/organisations");
+  return result.counties;
 }
 
 export async function previewReport(input: ReportPeriodInput): Promise<ReportPreview> {
-  try {
-    const params = new URLSearchParams();
-    params.set("scopeType", input.scopeType);
-    params.set("scopeId", input.scopeId);
-    params.set("startDate", input.startDate);
-    params.set("endDate", input.endDate);
-    params.set("kind", input.kind);
-    return await apiFetch<ReportPreview>(`/reports/preview?${params.toString()}`);
-  } catch {
-    return {
-      title: `${input.kind} Operations Report - ${input.startDate} to ${input.endDate}`,
-      narrative:
-        "Field environmental operations completed with high compliance across designated zones. Solid waste clearance, drainage unclogging, and tree canopy maintenance proceeded on schedule.",
-      recommendations:
-        "Deploy additional transfer tipper trucks for high-density market zones during peak morning hours.",
-      snapshot: {
-        scopeType: input.scopeType,
-        scopeId: input.scopeId,
-        scopeName: "Makina Ward (Kibra Sub-County)",
-        startDate: input.startDate,
-        endDate: input.endDate,
-        kind: input.kind,
-        generatedAt: new Date().toISOString(),
-        signedBy: "Ward Environment Officer",
-        signedTitle: "Ward Environment Officer",
-        totals: {
-          activeStaff: 48,
-          attendanceRate: 94,
-          workLogsCompleted: 14,
-          wasteLoadsEvacuated: 28,
-        },
-        days: [
-          {
-            date: input.startDate,
-            wards: [
-              {
-                wardId: input.scopeId,
-                wardName: "Makina Ward",
-                activity: "Drainage De-silting",
-                location: "Makina Main Road",
-                roster: [],
-              },
-            ],
-          },
-        ],
-        workLogs: [
-          {
-            id: "rwl_01",
-            wardId: input.scopeId,
-            wardName: "Makina Ward",
-            date: input.startDate,
-            activity: "Drainage De-silting",
-            location: "Makina Main Road",
-            description: "Cleared stormwater trench along marketplace",
-            areasRoads: "Makina Main Road",
-            numberOfTrips: 4,
-            wasteTransferInvolved: true,
-            truckId: "KBZ-124X",
-            backhoeId: null,
-            cleanupDone: true,
-            cleanupStakeholders: "Makina Traders Association",
-            climateTeamCount: 12,
-            staffCount: 8,
-            challenges: null,
-            completionStatus: "COMPLETE",
-            outstandingWork: null,
-            photos: [],
-          },
-        ],
-      },
-    };
-  }
+  const params = new URLSearchParams();
+  params.set("scopeType", input.scopeType);
+  params.set("scopeId", input.scopeId);
+  params.set("startDate", input.startDate);
+  params.set("endDate", input.endDate);
+  params.set("kind", input.kind);
+  return apiFetch<ReportPreview>(`/reports/preview?${params.toString()}`);
 }
 
 export async function draftReportNarrative(input: ReportPeriodInput): Promise<ReportAiDraft> {
-  try {
-    return await apiFetch<ReportAiDraft>("/reports/ai-draft", { method: "POST", body: input });
-  } catch {
-    return {
-      narrativeSource: "deterministic",
-      title: `${input.kind} Operations Report - ${input.startDate} to ${input.endDate}`,
-      narrative:
-        "Environmental management teams achieved 94% workforce turnout. All major stormwater drainages were cleared without incidence.",
-      recommendations:
-        "Procure additional PPE supplies and personal protective equipment for wet-season drainage teams.",
-      snapshot: (await previewReport(input)).snapshot,
-    };
-  }
+  return apiFetch<ReportAiDraft>("/reports/ai-draft", { method: "POST", body: input });
 }
 
 export async function finalizeReport(
   input: ReportPeriodInput & { narrative?: string; recommendations?: string },
 ): Promise<Report> {
-  try {
-    return await apiFetch<Report>("/reports", { method: "POST", body: input });
-  } catch {
-    const preview = await previewReport(input);
-    return {
-      id: "rep_final_01",
-      kind: input.kind,
-      scopeType: input.scopeType,
-      scopeId: input.scopeId,
-      periodStart: input.startDate,
-      periodEnd: input.endDate,
-      status: "FINALIZED",
-      title: preview.title,
-      narrative: input.narrative || preview.narrative,
-      recommendations: input.recommendations || preview.recommendations,
-      snapshot: preview.snapshot,
-      version: 1,
-      finalizedBy: "System Administrator",
-      finalizedAt: new Date().toISOString(),
-      createdBy: "System Administrator",
-      createdAt: new Date().toISOString(),
-      evidence: [],
-    };
-  }
+  return apiFetch<Report>("/reports", { method: "POST", body: input });
 }
 
 export async function listReports(query?: {
@@ -1571,102 +1095,32 @@ export async function listReportsPage(query?: {
   page?: number;
   pageSize?: number;
 }): Promise<{ items: ReportSummary[]; total: number; page: number; pageSize: number }> {
-  try {
-    const params = new URLSearchParams();
-    if (query?.scopeType) params.set("scopeType", query.scopeType);
-    if (query?.scopeId) params.set("scopeId", query.scopeId);
-    if (query?.kind) params.set("kind", query.kind);
-    if (query?.page) params.set("page", String(query.page));
-    if (query?.pageSize) params.set("pageSize", String(query.pageSize));
-    const suffix = params.toString() ? `?${params.toString()}` : "";
-    const response = await fetch(`${API_URL}/reports${suffix}`, { credentials: "include" });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new ApiError(
-        response.status,
-        body?.error?.code ?? "REQUEST_FAILED",
-        body?.error?.message ?? "Request failed",
-      );
-    }
-    return {
-      items: body as ReportSummary[],
-      total: Number(response.headers.get("x-total-count") ?? (body as ReportSummary[]).length),
-      page: Number(response.headers.get("x-page") ?? query?.page ?? 1),
-      pageSize: Number(response.headers.get("x-page-size") ?? query?.pageSize ?? 25),
-    };
-  } catch {
-    const mockReports: ReportSummary[] = [
-      {
-        id: "rep_01",
-        kind: "WEEKLY",
-        scopeType: "WARD",
-        scopeId: "ward_makina",
-        periodStart: "2026-08-17",
-        periodEnd: "2026-08-23",
-        status: "FINALIZED",
-        title: "Weekly Operations Report - Makina Ward",
-        version: 1,
-        finalizedBy: "Makina Ward Officer",
-        finalizedAt: "2026-08-24T09:00:00Z",
-        createdBy: "Makina Ward Officer",
-        createdAt: "2026-08-24T08:30:00Z",
-      },
-      {
-        id: "rep_02",
-        kind: "MONTHLY",
-        scopeType: "SUBCOUNTY",
-        scopeId: "subcounty_kibra",
-        periodStart: "2026-07-01",
-        periodEnd: "2026-07-31",
-        status: "FINALIZED",
-        title: "Monthly Environmental Review - Kibra Sub-County",
-        version: 1,
-        finalizedBy: "Kibra Sub-County Officer",
-        finalizedAt: "2026-08-02T11:00:00Z",
-        createdBy: "Kibra Sub-County Officer",
-        createdAt: "2026-08-01T16:00:00Z",
-      },
-    ];
-    return {
-      items: mockReports,
-      total: mockReports.length,
-      page: 1,
-      pageSize: 25,
-    };
+  const params = new URLSearchParams();
+  if (query?.scopeType) params.set("scopeType", query.scopeType);
+  if (query?.scopeId) params.set("scopeId", query.scopeId);
+  if (query?.kind) params.set("kind", query.kind);
+  if (query?.page) params.set("page", String(query.page));
+  if (query?.pageSize) params.set("pageSize", String(query.pageSize));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`${API_URL}/reports${suffix}`, { credentials: "include" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      body?.error?.code ?? "REQUEST_FAILED",
+      body?.error?.message ?? "Request failed",
+    );
   }
+  return {
+    items: body as ReportSummary[],
+    total: Number(response.headers.get("x-total-count") ?? (body as ReportSummary[]).length),
+    page: Number(response.headers.get("x-page") ?? query?.page ?? 1),
+    pageSize: Number(response.headers.get("x-page-size") ?? query?.pageSize ?? 25),
+  };
 }
 
 export async function fetchReport(id: string): Promise<Report> {
-  try {
-    return await apiFetch<Report>(`/reports/${encodeURIComponent(id)}`);
-  } catch {
-    const preview = await previewReport({
-      scopeType: "WARD",
-      scopeId: "ward_makina",
-      startDate: "2026-08-17",
-      endDate: "2026-08-23",
-      kind: "WEEKLY",
-    });
-    return {
-      id,
-      kind: "WEEKLY",
-      scopeType: "WARD",
-      scopeId: "ward_makina",
-      periodStart: "2026-08-17",
-      periodEnd: "2026-08-23",
-      status: "FINALIZED",
-      title: "Weekly Operations Report - Makina Ward",
-      narrative: preview.narrative,
-      recommendations: preview.recommendations,
-      snapshot: preview.snapshot,
-      version: 1,
-      finalizedBy: "Makina Ward Officer",
-      finalizedAt: "2026-08-24T09:00:00Z",
-      createdBy: "Makina Ward Officer",
-      createdAt: "2026-08-24T08:30:00Z",
-      evidence: [],
-    };
-  }
+  return apiFetch<Report>(`/reports/${encodeURIComponent(id)}`);
 }
 
 export async function downloadReportEvidence(accessPath: string): Promise<Blob> {

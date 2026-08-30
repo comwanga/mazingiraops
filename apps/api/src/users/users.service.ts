@@ -16,6 +16,7 @@ import { hashPassword } from "../common/crypto";
 
 const ACCESS_REQUEST_LIMIT = 20;
 const ACCESS_REQUEST_WINDOW_MS = 60 * 60 * 1000;
+const ACCESS_REQUEST_CONFLICT_MESSAGE = "An access request cannot be created for this email";
 
 export interface RequestAccessInput {
   displayName: string;
@@ -58,13 +59,13 @@ export class UsersService {
       where: { email: input.email },
     });
     if (existingUser) {
-      throw new ConflictException("An account already exists for this email");
+      throw new ConflictException(ACCESS_REQUEST_CONFLICT_MESSAGE);
     }
     const pending = await this.prisma.client.accessRequest.findFirst({
       where: { email: input.email, status: "PENDING" },
     });
     if (pending) {
-      throw new ConflictException("An access request is already pending for this email");
+      throw new ConflictException(ACCESS_REQUEST_CONFLICT_MESSAGE);
     }
     if (!(await this.scopeExists(input.requestedScope, input.requestedScopeId))) {
       throw new BadRequestException("Requested organisation scope does not exist");

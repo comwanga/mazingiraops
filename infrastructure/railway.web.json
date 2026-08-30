@@ -6,6 +6,8 @@
   },
   "deploy": {
     "numReplicas": 1,
+    "healthcheckPath": "/login",
+    "healthcheckTimeout": 300,
     "drainingSeconds": 30,
     "overlapSeconds": 30,
     "restartPolicyType": "ON_FAILURE",

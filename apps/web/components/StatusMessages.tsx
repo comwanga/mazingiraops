@@ -8,22 +8,25 @@ export function StatusMessages({
   loading?: string | null;
 }) {
   return (
-    <>
+    <div className="status-stack">
       {error && (
-        <p className="form-error" role="alert">
+        <p className="status-message form-error" role="alert">
+          <span className="status-icon" aria-hidden="true">!</span>
           {error}
         </p>
       )}
       {notice && (
-        <p className="form-success" role="status" aria-live="polite">
+        <p className="status-message form-success" role="status" aria-live="polite">
+          <span className="status-icon" aria-hidden="true">✓</span>
           {notice}
         </p>
       )}
       {loading && (
-        <p className="loading-status" role="status" aria-live="polite">
+        <p className="status-message loading-status" role="status" aria-live="polite">
+          <span className="status-spinner" aria-hidden="true" />
           {loading}
         </p>
       )}
-    </>
+    </div>
   );
 }

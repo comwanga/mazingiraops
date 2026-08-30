@@ -120,7 +120,6 @@ export function PasswordInput({
           aria-label={visible ? "Hide password" : "Show password"}
           title={visible ? "Hide password" : "Show password"}
           onClick={() => setVisible(!visible)}
-          tabIndex={-1}
         >
           {visible ? (
             /* Eye Off Icon */

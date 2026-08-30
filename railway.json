@@ -6,6 +6,13 @@
   },
   "deploy": {
     "numReplicas": 1,
+    "preDeployCommand": [
+      "pnpm db:deploy",
+      "node packages/database/dist/seed.js"
+    ],
+    "startCommand": "node apps/api/dist/main.js",
+    "healthcheckPath": "/health/ready",
+    "healthcheckTimeout": 300,
     "drainingSeconds": 30,
     "overlapSeconds": 30,
     "restartPolicyType": "ON_FAILURE",

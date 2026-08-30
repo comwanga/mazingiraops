@@ -52,25 +52,35 @@ USERS_MANAGE          users.manage          create/disable users, review access 
 
 | Capability | WARD_OFFICER | SUBCOUNTY_REVIEWER | HR_VIEWER | READ_ONLY | SYSTEM_ADMIN |
 |---|:---:|:---:|:---:|:---:|:---:|
-| STAFF_READ | ✓ | ✓ | ✓ | ✗¹ | ✓ |
-| STAFF_MANAGE | ✓ | ✗ | ✗ | ✗ | ✓ |
-| ATTENDANCE_READ | ✓ | ✓ | ✓ | ✓¹ | ✓ |
-| ATTENDANCE_MANAGE | ✓ | ✗ | ✗ | ✗ | ✓ |
-| WORK_READ | ✓ | ✓ | ✗ | ✗¹ | ✓ |
-| WORK_CREATE | ✓ | ✗ | ✗ | ✗ | ✓ |
-| WORK_REVIEW | ✗ | ✓ | ✗ | ✗ | ✓ |
-| ABSENCE_READ | ✓ | ✓ | ✓ | ✗¹ | ✓ |
-| ABSENCE_MANAGE | ✓ | ✗ | ✓ | ✗ | ✓ |
-| ABSENCE_REVIEW | ✗ | ✓ | ✓ | ✗ | ✓ |
-| MEDICAL_READ | ✗ | ✗ | ✓ | ✗ | ✓ |
+| STAFF_READ | ✓ | ✓ | ✓ | ✗¹ | ✗ |
+| STAFF_MANAGE | ✓ | ✗ | ✗ | ✗ | ✗ |
+| ATTENDANCE_READ | ✓ | ✓ | ✓ | ✓¹ | ✗ |
+| ATTENDANCE_MANAGE | ✓ | ✗ | ✗ | ✗ | ✗ |
+| WORK_READ | ✓ | ✓ | ✗ | ✗¹ | ✗ |
+| WORK_CREATE | ✓ | ✗ | ✗ | ✗ | ✗ |
+| WORK_REVIEW | ✗ | ✓ | ✗ | ✗ | ✗ |
+| ABSENCE_READ | ✓ | ✓ | ✓ | ✗¹ | ✗ |
+| ABSENCE_MANAGE | ✓ | ✗ | ✓ | ✗ | ✗ |
+| ABSENCE_REVIEW | ✗ | ✓ | ✓ | ✗ | ✗ |
+| MEDICAL_READ | ✗ | ✗ | ✓ | ✗ | ✗ |
 | REPORTS_READ | ✓ | ✓ | ✓ | ✓¹ | ✓ |
-| REPORTS_FINALIZE | ✗ | ✓ | ✗ | ✗ | ✓ |
-| AUDIT_READ | ✗ | ✓ | ✗ | ✗ | ✓ |
+| REPORTS_FINALIZE | ✗ | ✓ | ✗ | ✗ | ✗ |
+| AUDIT_READ | ✗ | ✓ | ✗ | ✗ | ✗ |
 | USERS_MANAGE | ✗ | ✗ | ✗ | ✗ | ✓ |
 
 ¹ READ_ONLY capability grants are controlled per-account at approval time
 (the legacy model granted `attendance,reports` by default; the same is
 expressed via assignments/capabilities rather than a CSV string).
+
+### Enforced System Administrator boundary
+
+`SYSTEM_ADMIN` is a platform-account role, not a ward-operations superuser.
+Its capability set is fixed and reconciled by every seed run to:
+`REPORTS_READ`, `USERS_MANAGE`, `USERS_READ`, `USERS_DISABLE`,
+`PERMISSIONS_MANAGE`, and `SCOPE_MANAGE`. All staff, attendance, work-log,
+absence, medical, report-generation/export/finalisation, audit, archive and
+evidence-mutation capabilities are denied. The API rejects attempts to expand
+the role, and the web permission editor renders it as a locked policy.
 
 ## 4. Scope resolution
 

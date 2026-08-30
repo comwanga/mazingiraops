@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { NestFastifyApplication } from "@nestjs/platform-fastify";
 import { PrismaClient } from "@ward-ops/database";
+import { SYSTEM_ADMIN_CAPABILITIES } from "@ward-ops/contracts";
 import { testConfig } from "./test-config";
 import {
   api,
@@ -196,5 +197,41 @@ describe("user administration (integration)", () => {
     });
     expect(update.statusCode).toBe(200);
     expect(await prisma.auditEvent.count({ where: { action: "ROLE.PERMISSIONS_UPDATED" } })).toBe(1);
+  });
+
+  it("keeps system administration outside ward operations while allowing report viewing", async () => {
+    const admin = await bootstrapAdmin(app);
+    const catalog = await api(app, {
+      method: "GET",
+      url: "/api/v1/users/permissions",
+      cookie: admin.cookie,
+    });
+    const systemAdmin = catalog.json().roles.find(
+      (role: { code: string }) => role.code === "SYSTEM_ADMIN",
+    );
+    expect(systemAdmin.capabilities).toEqual([...SYSTEM_ADMIN_CAPABILITIES].sort());
+
+    const staffList = await api(app, {
+      method: "GET",
+      url: "/api/v1/staff",
+      cookie: admin.cookie,
+    });
+    expect(staffList.statusCode).toBe(403);
+
+    const reportList = await api(app, {
+      method: "GET",
+      url: "/api/v1/reports",
+      cookie: admin.cookie,
+    });
+    expect(reportList.statusCode).toBe(200);
+
+    const expandPermissions = await api(app, {
+      method: "PUT",
+      url: "/api/v1/users/roles/SYSTEM_ADMIN/capabilities",
+      cookie: admin.cookie,
+      csrf: admin.csrf,
+      payload: { capabilities: [...SYSTEM_ADMIN_CAPABILITIES, "STAFF_MANAGE"] },
+    });
+    expect(expandPermissions.statusCode).toBe(400);
   });
 });

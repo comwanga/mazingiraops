@@ -115,7 +115,7 @@ describe("audit history (integration)", () => {
     const listResponse = await api(app, {
       method: "GET",
       url: "/api/v1/audit",
-      cookie: admin.cookie,
+      cookie: makinaReviewer.cookie,
     });
     expect(listResponse.statusCode).toBe(200);
     const body = listResponse.json();
@@ -183,7 +183,6 @@ describe("audit history (integration)", () => {
       url: "/api/v1/audit?action=TEST.SQL_FILTER&pageSize=1",
       cookie: admin.cookie,
     });
-    expect(adminList.statusCode).toBe(200);
-    expect(adminList.json().items[0].sourceIp).toMatch(/^10\.0\.0\./);
+    expect(adminList.statusCode).toBe(403);
   });
 });

@@ -17,7 +17,11 @@ export interface AuthUserSummary {
   displayName: string;
   active: boolean;
   mustChangePassword: boolean;
-  assignments: Array<Omit<AuthAssignment, "capabilities">>;
+  assignments: Array<Omit<AuthAssignment, "capabilities"> & {
+    countyName: string | null;
+    subcountyName: string | null;
+    wardName: string | null;
+  }>;
 }
 
 export interface LoginResult {
@@ -219,7 +223,16 @@ export class AuthService implements OnApplicationBootstrap {
           },
         },
       },
-      include: { assignments: { include: { role: true } } },
+      include: {
+        assignments: {
+          include: {
+            role: true,
+            county: true,
+            subcounty: true,
+            ward: { include: { subcounty: true } },
+          },
+        },
+      },
     });
 
     await this.audit.record({
@@ -350,7 +363,16 @@ export class AuthService implements OnApplicationBootstrap {
   private async loadUserWithAssignments(userId: string): Promise<AuthUserSummary> {
     const user = await this.prisma.client.user.findUnique({
       where: { id: userId },
-      include: { assignments: { include: { role: true } } },
+      include: {
+        assignments: {
+          include: {
+            role: true,
+            county: true,
+            subcounty: true,
+            ward: { include: { subcounty: true } },
+          },
+        },
+      },
     });
     if (!user) {
       throw new UnauthorizedException("User not found");
@@ -372,6 +394,9 @@ function toSummary(user: {
     subcountyId: string | null;
     wardId: string | null;
     role: { code: string; name: string };
+    county: { name: string } | null;
+    subcounty: { name: string } | null;
+    ward: { name: string; subcounty: { name: string } } | null;
   }>;
 }): AuthUserSummary {
   return {
@@ -388,6 +413,9 @@ function toSummary(user: {
       countyId: assignment.countyId,
       subcountyId: assignment.subcountyId,
       wardId: assignment.wardId,
+      countyName: assignment.county?.name ?? null,
+      subcountyName: assignment.subcounty?.name ?? assignment.ward?.subcounty.name ?? null,
+      wardName: assignment.ward?.name ?? null,
     })),
   };
 }

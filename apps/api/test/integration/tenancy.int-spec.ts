@@ -139,8 +139,10 @@ describe("cross-tenant isolation (integration)", () => {
       cookie: session.cookie,
     });
     const wardCodes = wards.json().wards.map((ward: { code: string }) => ward.code);
-    expect(wardCodes).toEqual(["MAKINA"]);
-    expect(wardCodes).not.toContain("WOODLEY");
+    expect(wardCodes).toHaveLength(5);
+    expect(wardCodes).toEqual(expect.arrayContaining([
+      "LAINI_SABA", "LINDI", "MAKINA", "WOODLEY", "SARANGOMBE",
+    ]));
 
     const makina = await api(app, {
       method: "GET",
@@ -154,7 +156,14 @@ describe("cross-tenant isolation (integration)", () => {
       url: `/api/v1/wards/${woodleyWard.id}`,
       cookie: session.cookie,
     });
-    expect(woodley.statusCode).toBe(404);
+    expect(woodley.statusCode).toBe(200);
+
+    const outsideSubcounty = await api(app, {
+      method: "GET",
+      url: `/api/v1/wards/${likoniWard.id}`,
+      cookie: session.cookie,
+    });
+    expect(outsideSubcounty.statusCode).toBe(404);
   });
 
   it("County-level user CAN access only the assigned county scope", async () => {
@@ -165,7 +174,8 @@ describe("cross-tenant isolation (integration)", () => {
       cookie: ncc.cookie,
     });
     const nccCodes = nccWards.json().wards.map((ward: { code: string }) => ward.code).sort();
-    expect(nccCodes).toEqual(["MAKINA", "WOODLEY"]);
+    expect(nccCodes).toHaveLength(85);
+    expect(nccCodes).toEqual(expect.arrayContaining(["MAKINA", "WOODLEY"]));
 
     const nccOutside = await api(app, {
       method: "GET",
@@ -205,5 +215,44 @@ describe("cross-tenant isolation (integration)", () => {
       subcounty.wards.map((ward) => ward.code),
     );
     expect(wardCodes).toEqual(["MAKINA"]);
+  });
+
+  it("persists Nairobi's complete hierarchy and identifies a ward officer by role and lineage", async () => {
+    const publicTree = await api(app, {
+      method: "GET",
+      url: "/api/v1/organisations/public",
+    });
+    expect(publicTree.statusCode).toBe(200);
+    const nairobi = publicTree.json().counties.find(
+      (county: { code: string }) => county.code === "NCC",
+    );
+    expect(nairobi.subcounties).toHaveLength(17);
+    expect(
+      nairobi.subcounties.flatMap(
+        (subcounty: { wards: Array<{ code: string }> }) => subcounty.wards,
+      ),
+    ).toHaveLength(85);
+    const kibra = nairobi.subcounties.find(
+      (subcounty: { code: string }) => subcounty.code === "KIBRA",
+    );
+    expect(kibra.wards.map((ward: { code: string }) => ward.code)).toEqual(
+      expect.arrayContaining(["MAKINA", "WOODLEY"]),
+    );
+
+    const session = await login(app, "makina.officer@makina.test", PASSWORD);
+    const me = await api(app, {
+      method: "GET",
+      url: "/api/v1/auth/me",
+      cookie: session.cookie,
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().user.assignments[0]).toEqual(expect.objectContaining({
+      role: "WARD_OFFICER",
+      roleName: "ward officer",
+      scopeType: "WARD",
+      wardName: "Makina",
+      subcountyName: "Kibra",
+      countyName: null,
+    }));
   });
 });

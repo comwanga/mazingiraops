@@ -637,6 +637,23 @@ html[data-theme="dark"] .brand-background {
   transition: background 0.15s ease;
 }
 
+.user-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.user-scope {
+  max-width: min(420px, 42vw);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .account-user-link:hover {
   background: rgba(20, 61, 43, 0.08);
 }
@@ -1296,6 +1313,12 @@ button:disabled,
 .dashboard-welcome p {
   margin: 0;
   color: rgba(255, 255, 255, 0.78);
+}
+
+.dashboard-welcome .dashboard-identity {
+  margin-top: 6px;
+  color: var(--forest);
+  font-weight: 700;
 }
 
 .dashboard-welcome .eyebrow {

@@ -29,7 +29,7 @@ describe("reports (integration)", () => {
 
   let officer: { cookie: string | null; csrf: string | null };
   let reviewer: { cookie: string | null; csrf: string | null };
-  let countyAdmin: { cookie: string | null; csrf: string | null };
+  let countyDirector: { cookie: string | null; csrf: string | null };
   let readOnly: { cookie: string | null; csrf: string | null };
   let foreignOfficer: { cookie: string | null; csrf: string | null };
 
@@ -86,12 +86,12 @@ describe("reports (integration)", () => {
     await createUserWithAssignment(prisma, {
       email: "county@makina.test",
       password: PASSWORD,
-      displayName: "County Admin",
-      roleCode: "SYSTEM_ADMIN",
+      displayName: "County Director",
+      roleCode: "DIRECTOR",
       scopeType: "COUNTY",
       scopeId: nccCounty.id,
     });
-    countyAdmin = await login(app, "county@makina.test", PASSWORD);
+    countyDirector = await login(app, "county@makina.test", PASSWORD);
 
     await createUserWithAssignment(prisma, {
       email: "readonly@makina.test",
@@ -607,13 +607,13 @@ describe("reports (integration)", () => {
     const preview = await api(app, {
       method: "GET",
       url: `/api/v1/reports/preview?scopeType=COUNTY&scopeId=${nccCounty.id}&startDate=${MONDAY}&endDate=${MONDAY}&kind=DAILY`,
-      cookie: countyAdmin.cookie,
+      cookie: countyDirector.cookie,
     });
     expect(preview.statusCode).toBe(200);
     const snapshot = preview.json().snapshot;
     expect(snapshot.totals.PRESENT).toBe(2);
     const wardNames = snapshot.days[0].wards.map((ward: { wardName: string }) => ward.wardName).sort();
-    expect(wardNames).toEqual(["Makina", "Woodley"]);
+    expect(wardNames).toEqual(["Makina", "Woodley/Kenyatta Golf Course"]);
     expect(snapshot.workLogs).toHaveLength(1);
   });
 
@@ -644,14 +644,17 @@ describe("reports (integration)", () => {
     const preview = await api(app, {
       method: "GET",
       url: `/api/v1/reports/preview?scopeType=COUNTY&scopeId=${nccCounty.id}&startDate=${MONDAY}&endDate=${MONDAY}&kind=DAILY`,
-      cookie: countyAdmin.cookie,
+      cookie: countyDirector.cookie,
     });
     expect(preview.statusCode).toBe(200);
     const wards = preview.json().snapshot.days[0].wards as Array<Record<string, any>>;
     const roles = Object.fromEntries(
       wards.map((ward) => [ward.wardName, ward.roster[0].role]),
     );
-    expect(roles).toEqual({ Makina: "Makina Designation", Woodley: "Woodley Designation" });
+    expect(roles).toEqual({
+      Makina: "Makina Designation",
+      "Woodley/Kenyatta Golf Course": "Woodley Designation",
+    });
   });
 
   // -- Photo sampling (§8) -----------------------------------------------------

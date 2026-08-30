@@ -110,7 +110,7 @@ describe("access requests (integration)", () => {
       },
     });
     expect(duplicate.statusCode).toBe(409);
-    expect(duplicate.json().message).toBe("An access request cannot be created for this email");
+    expect(duplicate.json().error.message).toBe("An access request cannot be created for this email");
   });
 
   it("does not reveal whether an email already has an account or a pending request", async () => {
@@ -137,7 +137,7 @@ describe("access requests (integration)", () => {
     });
 
     expect(response.statusCode).toBe(409);
-    expect(response.json().message).toBe("An access request cannot be created for this email");
+    expect(response.json().error.message).toBe("An access request cannot be created for this email");
   });
 
   it("approves a request, creates the account, and lets them log in", async () => {

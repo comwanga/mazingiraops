@@ -104,7 +104,7 @@ export interface AuthUser {
 }
 
 export interface MeResponse {
-  user: AuthUser & { capabilities: string[]; csrfToken: string } | null;
+  user: (AuthUser & { capabilities: string[]; csrfToken: string }) | null;
 }
 
 export interface LoginResponse {
@@ -331,7 +331,7 @@ export interface AuditEvent {
   targetId: string | null;
   scopeType: string | null;
   scopeId: string | null;
-  details: string | null;
+  details: string | Record<string, unknown> | null;
   sourceIp?: string | null;
 }
 

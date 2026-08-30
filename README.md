@@ -82,11 +82,12 @@ See [`.env.example`](.env.example) for the complete list. Key variables:
 APP_ENV=development
 DATABASE_URL=postgresql://ward_ops:ward_ops@localhost:5432/ward_ops
 OWNER_SETUP_TOKEN=<random one-time token for /setup>
+PUBLIC_BASE_URL=https://your-web-domain.example.go.ke  # required in production for QR links
 S3_BUCKET=             # required in production, along with S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY
 SECURE_COOKIES=true    # required in production
 ```
 
-Production refuses to start without `SECURE_COOKIES=true` and complete S3 configuration, so evidence is never silently written to the container filesystem.
+Production refuses to start without an HTTPS `PUBLIC_BASE_URL`, `SECURE_COOKIES=true`, and complete S3 configuration, so QR links remain usable and evidence is never silently written to the container filesystem.
 
 ## Tests
 

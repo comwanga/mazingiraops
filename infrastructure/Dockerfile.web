@@ -11,11 +11,11 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 
 ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
-# NEXT_PUBLIC_* values are inlined at build time; point the browser bundle at
-# the API base URL so the production web app can reach the API. Railway injects
-# service variables into the build environment, so declare the ARG without a
-# default to inherit the NEXT_PUBLIC_API_URL variable at build time.
+# The Next.js server proxies same-origin /api/v1 requests. Prefer Railway's
+# private API URL; NEXT_PUBLIC_API_URL remains a backwards-compatible fallback.
+ARG API_INTERNAL_URL
 ARG NEXT_PUBLIC_API_URL
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN pnpm db:generate \
   && pnpm --filter @ward-ops/contracts build \

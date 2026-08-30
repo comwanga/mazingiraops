@@ -16,10 +16,13 @@ RUN pnpm db:generate \
 
 FROM node:24-bookworm-slim AS runtime
 RUN corepack enable \
+  && corepack prepare pnpm@8.15.9 --activate \
   && apt-get update \
   && apt-get install -y --no-install-recommends openssl postgresql-client \
   && rm -rf /var/lib/apt/lists/*
-ENV NODE_ENV=production APP_ENV=production
+ENV NODE_ENV=production
+ENV APP_ENV=production
+ENV SECURE_COOKIES=true
 WORKDIR /app
 COPY --from=build /app ./
 USER node

@@ -1,1 +1,0 @@
-.status-edit{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.2fr) auto;gap:5px;align-items:center;min-width:290px}.status-edit select,.status-edit input{padding:6px 7px;font-size:11px}.status-edit .link-button{white-space:nowrap}@media(max-width:700px){.status-edit{grid-template-columns:1fr;min-width:180px}}

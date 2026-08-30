@@ -1,9 +1,0 @@
-{
-  "name": "Makina Ward Operations",
-  "short_name": "Makina Ops",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#f4f2e9",
-  "theme_color": "#143d2b",
-  "description": "Staff attendance, leave and environment work reporting for Makina Ward"
-}

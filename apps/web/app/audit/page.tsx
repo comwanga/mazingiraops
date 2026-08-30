@@ -58,7 +58,7 @@ export default function AuditPage() {
   return (
     <main className="dashboard" aria-busy={loading}>
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">AUDIT HISTORY</p>
           <h1>Audit</h1>
@@ -91,7 +91,7 @@ export default function AuditPage() {
                   <td>{event.actorDisplayName ?? "System"}</td>
                   <td>{event.targetType}</td>
                   <td>{event.scopeType ? event.scopeType.toLowerCase() : "global"}</td>
-                  <td>{event.details ?? ""}</td>
+                  <td>{typeof event.details === "string" ? event.details : JSON.stringify(event.details ?? "")}</td>
                 </tr>
               ))}
             </tbody>

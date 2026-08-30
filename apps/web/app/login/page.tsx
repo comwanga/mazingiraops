@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { PasswordInput } from "@/components/PasswordInput";
 import { apiErrorMessage, fetchMe, login } from "@/lib/api";
 import { StatusMessages } from "@/components/StatusMessages";
 
@@ -42,28 +43,40 @@ export default function LoginPage() {
       <section className="hero auth-hero">
         <BrandLogo size={96} priority />
         <p className="eyebrow">NAIROBI CITY COUNTY</p>
-        <h1>Sign in</h1>
+        <h1>MazingiraOps</h1>
         <p className="subtitle">Environment Operations Platform</p>
 
+        <nav className="auth-switcher" aria-label="Account access">
+          <span className="auth-tab active" aria-current="page">
+            Sign in
+          </span>
+          <Link href="/register" className="auth-tab">
+            Request access
+          </Link>
+        </nav>
+
         <form className="auth-form" onSubmit={onSubmit}>
-          <label htmlFor="email">Email</label>
+          <label htmlFor="email">Official Email</label>
           <input
             id="email"
             type="email"
             autoComplete="username"
+            placeholder="officer@nairobi.go.ke"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             required
           />
-          <label htmlFor="password">Password</label>
-          <input
+
+          <PasswordInput
             id="password"
-            type="password"
-            autoComplete="current-password"
+            name="password"
+            label="Password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={setPassword}
+            autoComplete="current-password"
             required
           />
+
           <StatusMessages error={error} />
           <button type="submit" disabled={submitting}>
             {submitting ? "Signing in..." : "Sign in"}
@@ -77,3 +90,4 @@ export default function LoginPage() {
     </main>
   );
 }
+

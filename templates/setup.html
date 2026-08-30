@@ -1,5 +1,0 @@
-{% extends "base.html" %}
-{% block title %}Owner Setup · Makina Ward Operations{% endblock %}
-{% block body %}
-<main class="checkin-shell"><div class="mini-brand"><div class="county-mark">NCC</div><span>MAKINA WARD<br><strong>Owner Setup</strong></span></div><section class="checkin-card"><p class="eyebrow">ONE-TIME SETUP</p><h1>Create your owner account</h1>{% if error %}<div class="notice">{{ error }}</div>{% endif %}<form method="post"><label>Your full name<input name="display_name" minlength="3" required></label><label>Your email<input type="email" name="email" autocomplete="email" required></label><label>New password<input type="password" name="password" minlength="12" autocomplete="new-password" required></label><label>Owner setup token<input type="password" name="setup_token" autocomplete="off" required></label><button class="button full">Create owner account</button></form><p class="privacy">The setup token is stored in Railway as `OWNER_SETUP_TOKEN`. This page closes permanently after setup.</p><a href="/login">Return to sign in</a></section></main>
-{% endblock %}

@@ -110,6 +110,34 @@ describe("access requests (integration)", () => {
       },
     });
     expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json().error.message).toBe("An access request cannot be created for this email");
+  });
+
+  it("does not reveal whether an email already has an account or a pending request", async () => {
+    await createUserWithAssignment(prisma, {
+      email: "existing.user@makina.test",
+      password: "ExistingPass-123",
+      displayName: "Existing User",
+      roleCode: "READ_ONLY",
+      scopeType: "WARD",
+      scopeId: makinaWard.id,
+    });
+
+    const response = await api(app, {
+      method: "POST",
+      url: "/api/v1/users/access-requests",
+      payload: {
+        displayName: "Existing User",
+        email: "existing.user@makina.test",
+        password: REQUEST_PASSWORD,
+        reason: "Requesting access to the existing account",
+        requestedScope: "WARD",
+        requestedScopeId: makinaWard.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toBe("An access request cannot be created for this email");
   });
 
   it("approves a request, creates the account, and lets them log in", async () => {

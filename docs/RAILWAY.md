@@ -2,21 +2,22 @@
 
 ## Create the services
 
-1. In Railway, create a project from the `comwanga/makina-ward-ops` GitHub repository.
+1. In Railway, create a project from the `comwanga/mazingiraops` GitHub repository.
 2. Select `main` as the production branch and enable automatic deployments.
 3. Create three services:
-   - **api**: connects to the repository. `railway.json` builds `infrastructure/Dockerfile.api`, starts one replica on its assigned `PORT`, and checks `/health/ready` before considering the deployment healthy. Leave the custom Start Command empty.
-   - **web**: connects to the repository. In the service's Deploy settings set the Dockerfile path to `infrastructure/Dockerfile.web`, and pass `NEXT_PUBLIC_API_URL` as a **build variable** equal to your public API domain (see below) — it is inlined into the browser bundle at build time.
+   - **api**: connects to the repository. `railway.json` builds `infrastructure/Dockerfile.api`, applies migrations and reference seed data in Railway's pre-deploy phase, starts the API on its assigned `PORT`, and checks `/health/ready` before promotion. Leave dashboard build/deploy command overrides empty so the checked-in configuration remains authoritative.
+   - **web**: connects to the repository. Set its config-file path to `infrastructure/railway.web.json`. Add `API_INTERNAL_URL` as a build variable pointing to the API service's Railway private-network origin (for example `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`; replace `api` if the service has a different name). The Next.js server proxies browser requests through the web origin.
    - **PostgreSQL**: add a Postgres service to the same Railway project.
 4. Add the variables listed below to the api service.
-5. Generate a public domain under the api service Networking settings, and a second public domain for the web service.
-6. (Optional) Add an object-storage service such as S3-compatible storage and wire the `S3_*` variables below. Production refuses to start without S3 configuration so evidence is never silently written to the ephemeral container filesystem.
+5. Generate a public domain for the web service. An API public domain is optional because web-to-API traffic uses Railway private networking.
+6. Add an S3-compatible object-storage service and wire the `S3_*` variables below. Production refuses to start without S3 configuration so evidence is never silently written to the ephemeral container filesystem.
 
 ## Required variables (api service)
 
 ```text
 APP_ENV=production
 DATABASE_URL=${{Postgres.DATABASE_URL}}
+PUBLIC_BASE_URL=https://${{web.RAILWAY_PUBLIC_DOMAIN}}
 SECURE_COOKIES=true
 S3_BUCKET=<your S3 bucket>
 S3_ACCESS_KEY_ID=<your S3 access key id>
@@ -25,7 +26,7 @@ S3_REGION=<your bucket region>
 OWNER_SETUP_TOKEN=<a separate random one-time token of at least 32 characters>
 ```
 
-Railway supplies `RAILWAY_PUBLIC_DOMAIN` after a public domain is generated for the api service. The API automatically uses it for QR check-in links. `PUBLIC_BASE_URL` is only required when using a custom domain:
+`PUBLIC_BASE_URL` must be the public **web** origin because attendance QR codes link to the web app's `/check-in/{token}` screen. It is required and must use HTTPS in production. If the web service is not named `web`, update the Railway variable reference accordingly. For a custom domain use:
 
 ```text
 PUBLIC_BASE_URL=https://your-approved-domain.example.go.ke
@@ -33,13 +34,15 @@ PUBLIC_BASE_URL=https://your-approved-domain.example.go.ke
 
 The S3 credential must allow at least `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` and `s3:ListBucket` on the bucket. `s3:ListBucket` is required by both evidence reconciliation and the `/health/ready` storage probe, so a credential that only allows object operations will keep the deployment unhealthy.
 
-For the web service set the build variable `NEXT_PUBLIC_API_URL` to the API base URL, e.g. `https://<api-railway-domain>/api/v1`. The default (`http://localhost:4000/api/v1`) is only correct for local development.
+`NEXT_PUBLIC_API_URL` remains supported for older deployments, but `API_INTERNAL_URL` is preferred because the API URL is consumed by the Next.js server-side proxy and does not need to be public.
+
+> Railway has deprecated legacy Config as Code (`railway.json`) for removal on 1 December 2026. These files remain supported for the current deployment, but the project must migrate the two service definitions to Railway Infrastructure as Code before that date.
 
 ## First-time setup
 
 After deployment, open `/setup` on the web domain, enter `OWNER_SETUP_TOKEN`, and create your permanent owner name, email and password. When setup completes, sign in with the account you just created. Remove `OWNER_SETUP_TOKEN` from Railway after setup and redeploy.
 
-Visitors use `/register` to request benchmark access. They cannot sign in until the owner approves them under **User access**. Approved applicants receive the fixed `read_only` role and cannot perform officer or administrator changes.
+Visitors use `/register` to request access. They cannot sign in until an authorized reviewer approves them under **User access** and explicitly selects the role and scope. New accounts must change their password on first sign-in.
 
 ## Optional email variables
 

@@ -59,7 +59,7 @@ export default function DashboardPage() {
   return (
     <main className="dashboard">
       <header className="dash-header">
-        <BrandLogo size={44} />
+        <BrandLogo size={44} href="/dashboard" />
         <div className="dash-title">
           <p className="eyebrow">MAZINGIRA OPS · OPERATIONS</p>
           <h1>Dashboard</h1>

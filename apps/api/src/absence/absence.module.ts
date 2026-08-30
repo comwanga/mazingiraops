@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
+import { Inject, Injectable, Logger, Module, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { AuthorizationModule } from "../authorization/authorization.module";
 import { StorageModule } from "../storage/storage.module";
 import { APP_CONFIG } from "../config/config.module";
@@ -17,6 +17,7 @@ const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
  */
 @Injectable()
 export class ReminderScheduler implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly logger = new Logger("ReminderScheduler");
   private timer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -26,15 +27,23 @@ export class ReminderScheduler implements OnApplicationBootstrap, OnModuleDestro
 
   async onApplicationBootstrap(): Promise<void> {
     if (this.config.env === "test") return;
-    void this.reminders.processReminders().catch(() => undefined);
+    void this.run();
     this.timer = setInterval(() => {
-      void this.reminders.processReminders().catch(() => undefined);
+      void this.run();
     }, REMINDER_INTERVAL_MS);
     this.timer.unref();
   }
 
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
+  }
+
+  private async run(): Promise<void> {
+    try {
+      await this.reminders.processReminders();
+    } catch (error) {
+      this.logger.error(`Reminder processing failed: ${String(error)}`);
+    }
   }
 }
 

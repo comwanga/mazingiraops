@@ -4,9 +4,11 @@ import {
   apiErrorMessage,
   ApiError,
   downloadReportEvidence,
+  listStaff,
   listAttendance,
   listPublicOrganisations,
   listUsers,
+  login,
   requestAccess,
   resetUserPassword,
   setUserActive,
@@ -33,6 +35,35 @@ describe("role-aware API errors", () => {
     expect(apiErrorMessage(new ApiError(401, "UNAUTHORIZED", "Unauthorized"), "Failed")).toContain(
       "expired",
     );
+  });
+});
+
+describe("API trust boundaries", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("never converts a failed sign-in request into a local session", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network unavailable")));
+
+    await expect(login("admin@nairobi.go.ke", "not-a-real-password")).rejects.toThrow(
+      "network unavailable",
+    );
+  });
+
+  it("surfaces backend unavailability instead of returning fabricated records", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () =>
+          JSON.stringify({ error: { code: "SERVICE_UNAVAILABLE", message: "Service unavailable" } }),
+      }),
+    );
+
+    await expect(listStaff()).rejects.toMatchObject({
+      status: 503,
+      code: "SERVICE_UNAVAILABLE",
+    });
   });
 });
 

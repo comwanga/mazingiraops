@@ -21,6 +21,35 @@ describe("loadConfig", () => {
     expect(config.ai.enabled).toBe(false);
   });
 
+  it("loads paired bootstrap administrator credentials", () => {
+    const config = loadConfig({
+      DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+      APP_ENV: "development",
+      BOOTSTRAP_ADMIN_EMAIL: " Admin@Example.Test ",
+      BOOTSTRAP_ADMIN_PASSWORD: "TemporaryPass-123",
+      BOOTSTRAP_ADMIN_NAME: " County Administrator ",
+    });
+
+    expect(config.bootstrapAdmin).toEqual({
+      email: "admin@example.test",
+      password: "TemporaryPass-123",
+      displayName: "County Administrator",
+    });
+  });
+
+  it("rejects incomplete bootstrap administrator credentials", () => {
+    const base = {
+      DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+      APP_ENV: "development",
+    };
+    expect(() =>
+      loadConfig({ ...base, BOOTSTRAP_ADMIN_EMAIL: "admin@example.test" }),
+    ).toThrow(/must be provided together/);
+    expect(() =>
+      loadConfig({ ...base, BOOTSTRAP_ADMIN_PASSWORD: "TemporaryPass-123" }),
+    ).toThrow(/must be provided together/);
+  });
+
   it("fails when DATABASE_URL is missing", () => {
     expect(() => loadConfig({ APP_ENV: "development" })).toThrow();
   });

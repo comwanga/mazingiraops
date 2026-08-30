@@ -17,6 +17,9 @@ const envSchema = z
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_FORCE_PATH_STYLE: z.string().optional(),
     OWNER_SETUP_TOKEN: z.string().optional(),
+    BOOTSTRAP_ADMIN_EMAIL: z.string().trim().toLowerCase().email().optional(),
+    BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),
+    BOOTSTRAP_ADMIN_NAME: z.string().trim().min(1).optional(),
     SMTP_HOST: z.string().optional(),
     SMTP_PORT: z.coerce.number().int().default(587),
     SMTP_USERNAME: z.string().optional(),
@@ -30,6 +33,13 @@ const envSchema = z
     DOCUMENT_STORE_DIR: z.string().default("data/objects"),
   })
   .superRefine((env, ctx) => {
+    if (Boolean(env.BOOTSTRAP_ADMIN_EMAIL) !== Boolean(env.BOOTSTRAP_ADMIN_PASSWORD)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be provided together",
+        path: [env.BOOTSTRAP_ADMIN_EMAIL ? "BOOTSTRAP_ADMIN_PASSWORD" : "BOOTSTRAP_ADMIN_EMAIL"],
+      });
+    }
     if (env.APP_ENV === "production") {
       if (!env.PUBLIC_BASE_URL) {
         ctx.addIssue({
@@ -85,6 +95,7 @@ export interface AppConfig {
     configured: boolean;
   };
   ownerSetupToken?: string;
+  bootstrapAdmin?: { email: string; password: string; displayName: string };
   smtp: {
     host?: string;
     port: number;
@@ -128,6 +139,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       configured: s3Configured,
     },
     ownerSetupToken: parsed.OWNER_SETUP_TOKEN,
+    bootstrapAdmin:
+      parsed.BOOTSTRAP_ADMIN_EMAIL && parsed.BOOTSTRAP_ADMIN_PASSWORD
+        ? {
+            email: parsed.BOOTSTRAP_ADMIN_EMAIL,
+            password: parsed.BOOTSTRAP_ADMIN_PASSWORD,
+            displayName: parsed.BOOTSTRAP_ADMIN_NAME ?? "System Administrator",
+          }
+        : undefined,
     smtp: {
       host: parsed.SMTP_HOST,
       port: parsed.SMTP_PORT,

@@ -6,6 +6,7 @@ import {
   api,
   bootstrapAdmin,
   buildApp,
+  createUserWithAssignment,
   login,
   resetAuthData,
 } from "./test-utils";
@@ -22,7 +23,7 @@ describe("auth flow (integration)", () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    await app?.close();
     await prisma.$disconnect();
   });
 
@@ -65,6 +66,112 @@ describe("auth flow (integration)", () => {
       },
     });
     expect(wrongToken.statusCode).toBe(403);
+  });
+
+  it("creates the deployment bootstrap admin once and requires a password change", async () => {
+    const bootstrapConfig = {
+      ...testConfig(TEST_DB_URL),
+      bootstrapAdmin: {
+        email: "bootstrap.admin@makina.test",
+        password: "TemporaryAdmin-123",
+        displayName: "Bootstrap Administrator",
+      },
+    };
+    const bootstrapApp = await buildApp(bootstrapConfig);
+    try {
+      const session = await login(
+        bootstrapApp,
+        "bootstrap.admin@makina.test",
+        "TemporaryAdmin-123",
+      );
+      expect(session.user?.mustChangePassword).toBe(true);
+
+      const blocked = await api(bootstrapApp, {
+        method: "GET",
+        url: "/api/v1/dashboard",
+        cookie: session.cookie,
+      });
+      expect(blocked.statusCode).toBe(403);
+      expect(blocked.json().error.message).toMatch(/Password change required/);
+
+      const change = await api(bootstrapApp, {
+        method: "POST",
+        url: "/api/v1/auth/change-password",
+        cookie: session.cookie,
+        csrf: session.csrf,
+        payload: {
+          currentPassword: "TemporaryAdmin-123",
+          newPassword: "PermanentAdmin-456",
+        },
+      });
+      expect(change.statusCode).toBe(200);
+    } finally {
+      await bootstrapApp.close();
+    }
+
+    const restartedApp = await buildApp(bootstrapConfig);
+    try {
+      const temporary = await login(
+        restartedApp,
+        "bootstrap.admin@makina.test",
+        "TemporaryAdmin-123",
+      );
+      expect(temporary.user).toBeUndefined();
+
+      const permanent = await login(
+        restartedApp,
+        "bootstrap.admin@makina.test",
+        "PermanentAdmin-456",
+      );
+      expect(permanent.user?.mustChangePassword).toBe(false);
+      expect(
+        await prisma.auditEvent.count({ where: { action: "AUTH.BOOTSTRAP_ENV" } }),
+      ).toBe(1);
+    } finally {
+      await restartedApp.close();
+    }
+  });
+
+  it("reconciles a matching pre-bootstrap admin exactly once", async () => {
+    const county = await prisma.county.findUniqueOrThrow({ where: { code: "NCC" } });
+    await createUserWithAssignment(prisma, {
+      email: "bootstrap.admin@makina.test",
+      password: "PreviousAdmin-123",
+      displayName: "Previous Administrator",
+      roleCode: "SYSTEM_ADMIN",
+      scopeType: "COUNTY",
+      scopeId: county.id,
+    });
+    const bootstrapConfig = {
+      ...testConfig(TEST_DB_URL),
+      bootstrapAdmin: {
+        email: "bootstrap.admin@makina.test",
+        password: "TemporaryAdmin-123",
+        displayName: "Bootstrap Administrator",
+      },
+    };
+
+    const reconciledApp = await buildApp(bootstrapConfig);
+    try {
+      const previous = await login(
+        reconciledApp,
+        "bootstrap.admin@makina.test",
+        "PreviousAdmin-123",
+      );
+      expect(previous.user).toBeUndefined();
+
+      const temporary = await login(
+        reconciledApp,
+        "bootstrap.admin@makina.test",
+        "TemporaryAdmin-123",
+      );
+      expect(temporary.user?.mustChangePassword).toBe(true);
+      expect(
+        await prisma.auditEvent.count({ where: { action: "AUTH.BOOTSTRAP_ENV" } }),
+      ).toBe(1);
+    } finally {
+      await reconciledApp.close();
+    }
   });
 
   it("logs in, exposes me, logs out, and revokes the session", async () => {

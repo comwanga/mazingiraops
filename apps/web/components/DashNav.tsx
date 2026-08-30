@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { visibleNavigation } from "@/lib/capabilities";
 import { AuthUser, fetchMe, logout } from "@/lib/api";
+import { formatUserIdentity } from "@/lib/identity";
 
 export function DashNav() {
   const pathname = usePathname();
@@ -87,7 +88,10 @@ export function DashNav() {
           <span className="user-avatar" aria-hidden="true">
             {user.displayName.charAt(0).toUpperCase()}
           </span>
-          <span className="user-name">{user.displayName}</span>
+          <span className="user-identity">
+            <span className="user-name">{user.displayName}</span>
+            <span className="user-scope">{formatUserIdentity(user)}</span>
+          </span>
         </Link>
         <button
           type="button"

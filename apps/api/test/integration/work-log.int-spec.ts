@@ -400,7 +400,7 @@ describe("work operations (integration)", () => {
     });
     expect(hidden.statusCode).toBe(404);
 
-    const acted = await action(foreign.id, { action: "APPROVE" });
+    const acted = await action(foreign.id, { action: "APPROVE" }, officer);
     expect(acted.status).toBe(404);
   });
 

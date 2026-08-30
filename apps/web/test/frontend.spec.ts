@@ -15,6 +15,8 @@ import {
   updateUserAssignments,
 } from "@/lib/api";
 import { visibleNavigation } from "@/lib/capabilities";
+import { formatUserIdentity } from "@/lib/identity";
+import { SYSTEM_ADMIN_CAPABILITIES } from "@ward-ops/contracts";
 import { createQrMatrix } from "@/lib/qr";
 
 describe("capability-aware navigation", () => {
@@ -24,6 +26,33 @@ describe("capability-aware navigation", () => {
       "/attendance",
       "/reports",
     ]);
+  });
+
+  it("shows system administrators only account administration and reports", () => {
+    expect(visibleNavigation(SYSTEM_ADMIN_CAPABILITIES).map((item) => item.href)).toEqual([
+      "/dashboard",
+      "/access-requests",
+      "/reports",
+    ]);
+  });
+});
+
+describe("signed-in role and scope identity", () => {
+  it("identifies a Makina ward environment officer with the correct parent sub-county", () => {
+    expect(formatUserIdentity({
+      assignments: [{
+        id: "assignment-1",
+        role: "WARD_OFFICER",
+        roleName: "ward officer",
+        scopeType: "WARD",
+        countyId: null,
+        subcountyId: null,
+        wardId: "ward-makina",
+        countyName: null,
+        subcountyName: "Kibra",
+        wardName: "Makina",
+      }],
+    })).toBe("Ward Environment Officer · Makina Ward · Kibra Sub-County");
   });
 });
 

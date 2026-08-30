@@ -48,6 +48,21 @@ export const CAPABILITY_CODES = [
 ] as const;
 export type CapabilityCode = (typeof CAPABILITY_CODES)[number];
 
+/**
+ * System administrators govern accounts, permissions and organisational
+ * assignments. They may read finalized operational reports, but they are not
+ * ward operators and must never receive create, edit, review or archive
+ * capabilities for ward records.
+ */
+export const SYSTEM_ADMIN_CAPABILITIES = [
+  "REPORTS_READ",
+  "USERS_MANAGE",
+  "USERS_READ",
+  "USERS_DISABLE",
+  "PERMISSIONS_MANAGE",
+  "SCOPE_MANAGE",
+] as const satisfies readonly CapabilityCode[];
+
 export const ATTENDANCE_STATUSES = [
   "PRESENT",
   "LATE",

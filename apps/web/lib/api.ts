@@ -100,6 +100,9 @@ export interface AuthUser {
     countyId: string | null;
     subcountyId: string | null;
     wardId: string | null;
+    countyName: string | null;
+    subcountyName: string | null;
+    wardName: string | null;
   }>;
 }
 

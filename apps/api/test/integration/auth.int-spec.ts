@@ -183,6 +183,7 @@ describe("auth flow (integration)", () => {
     expect(meBody.user.email).toBe("admin@makina.test");
     expect(meBody.user.assignments).toHaveLength(1);
     expect(meBody.user.assignments[0].role).toBe("SYSTEM_ADMIN");
+    expect(meBody.user.assignments[0].countyName).toBe("Nairobi City County");
     expect(meBody.user.capabilities).toContain("USERS_MANAGE");
     expect(typeof meBody.user.csrfToken).toBe("string");
 

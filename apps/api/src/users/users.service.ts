@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { RoleCode, ScopeType } from "@ward-ops/contracts";
+import { SYSTEM_ADMIN_CAPABILITIES, type CapabilityCode, type RoleCode, type ScopeType } from "@ward-ops/contracts";
 import type { UpdateRoleCapabilitiesInput, UpdateUserAssignmentsInput } from "@ward-ops/validation";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
@@ -407,12 +407,17 @@ export class UsersService {
   ): Promise<void> {
     const role = await this.prisma.client.role.findUnique({ where: { code: roleCode } });
     if (!role) throw new NotFoundException("Role not found");
-    const requiredAdminCapabilities = ["PERMISSIONS_MANAGE", "USERS_MANAGE", "SCOPE_MANAGE"];
-    if (
-      roleCode === "SYSTEM_ADMIN" &&
-      requiredAdminCapabilities.some((capability) => !input.capabilities.includes(capability as never))
-    ) {
-      throw new BadRequestException("System administrator must retain permission, user and scope management");
+    if (roleCode === "SYSTEM_ADMIN") {
+      const allowed = new Set<CapabilityCode>(SYSTEM_ADMIN_CAPABILITIES);
+      const missing = SYSTEM_ADMIN_CAPABILITIES.some(
+        (capability) => !input.capabilities.includes(capability),
+      );
+      const prohibited = input.capabilities.some((capability) => !allowed.has(capability));
+      if (missing || prohibited) {
+        throw new BadRequestException(
+          "System administrator permissions are fixed to account administration and report viewing",
+        );
+      }
     }
     const capabilities = await this.prisma.client.capability.findMany({
       where: { code: { in: input.capabilities } },

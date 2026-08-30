@@ -14,20 +14,22 @@ import {
   fetchDashboard,
   fetchMe,
 } from "@/lib/api";
+import { formatUserIdentity } from "@/lib/identity";
 
 const METRICS: Array<{
   key: keyof DashboardSnapshot["metrics"];
   label: string;
   href: string;
   detail: string;
+  capability: string;
 }> = [
-  { key: "activeStaff", label: "Active staff", href: "/staff", detail: "in accessible wards" },
-  { key: "presentOrLateToday", label: "Present or late", href: "/attendance", detail: "recorded today" },
-  { key: "openSessions", label: "Open sessions", href: "/attendance", detail: "accepting check-ins" },
-  { key: "approvedAbsencesToday", label: "Approved absences", href: "/absences", detail: "covering today" },
-  { key: "pendingAbsences", label: "Pending absences", href: "/absences", detail: "awaiting review" },
-  { key: "pendingWorkLogs", label: "Pending work logs", href: "/worklogs", detail: "awaiting review" },
-  { key: "finalizedReports", label: "Finalized reports", href: "/reports", detail: "within your scope" },
+  { key: "activeStaff", label: "Active staff", href: "/staff", detail: "in accessible wards", capability: "STAFF_READ" },
+  { key: "presentOrLateToday", label: "Present or late", href: "/attendance", detail: "recorded today", capability: "ATTENDANCE_READ" },
+  { key: "openSessions", label: "Open sessions", href: "/attendance", detail: "accepting check-ins", capability: "ATTENDANCE_READ" },
+  { key: "approvedAbsencesToday", label: "Approved absences", href: "/absences", detail: "covering today", capability: "ABSENCE_READ" },
+  { key: "pendingAbsences", label: "Pending absences", href: "/absences", detail: "awaiting review", capability: "ABSENCE_REVIEW" },
+  { key: "pendingWorkLogs", label: "Pending work logs", href: "/worklogs", detail: "awaiting review", capability: "WORK_REVIEW" },
+  { key: "finalizedReports", label: "Finalized reports", href: "/reports", detail: "within your scope", capability: "REPORTS_READ" },
 ];
 
 export default function DashboardPage() {
@@ -71,6 +73,7 @@ export default function DashboardPage() {
         <div>
           <p className="eyebrow">CURRENT OPERATIONAL VIEW</p>
           <h2>{user ? `Welcome, ${user.displayName}` : "Loading dashboard"}</h2>
+          {user && <p className="dashboard-identity">{formatUserIdentity(user)}</p>}
           <p>
             {snapshot
               ? `One synchronized snapshot as of ${new Date(snapshot.asOf).toLocaleString()}.`
@@ -86,7 +89,7 @@ export default function DashboardPage() {
       {snapshot && (
         <>
           <section className="metric-grid" aria-label="Operational summary">
-            {METRICS.map((metric) => (
+            {METRICS.filter((metric) => user?.capabilities.includes(metric.capability)).map((metric) => (
               <Link className="dashboard-metric" href={metric.href} key={metric.key}>
                 <span className="metric-value">{snapshot.metrics[metric.key]}</span>
                 <strong>{metric.label}</strong>

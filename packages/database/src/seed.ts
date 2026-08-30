@@ -1,4 +1,5 @@
 import { CapabilityCode, PrismaClient, RoleCode } from "@prisma/client";
+import { NAIROBI_SUBCOUNTIES } from "./nairobi-hierarchy";
 
 const prisma = new PrismaClient();
 
@@ -30,7 +31,14 @@ const CAPABILITIES: Array<{ code: CapabilityCode; name: string }> = [
 ];
 
 const ROLE_CAPABILITIES: Record<RoleCode, CapabilityCode[]> = {
-  SYSTEM_ADMIN: CAPABILITIES.map((c) => c.code),
+  SYSTEM_ADMIN: [
+    "REPORTS_READ",
+    "USERS_MANAGE",
+    "USERS_READ",
+    "USERS_DISABLE",
+    "PERMISSIONS_MANAGE",
+    "SCOPE_MANAGE",
+  ],
   WARD_OFFICER: [
     "STAFF_READ",
     "STAFF_MANAGE",
@@ -107,7 +115,9 @@ async function main() {
       update: { name: roleCode.replace(/_/g, " ").toLowerCase() },
       create: { code: roleCode as RoleCode, name: roleCode.replace(/_/g, " ").toLowerCase() },
     });
-    if (role.permissionsManagedAt) continue;
+    // Custom role bundles remain operator-managed. SYSTEM_ADMIN is a security
+    // boundary and is always reconciled to the non-operational allowlist.
+    if (role.permissionsManagedAt && role.code !== "SYSTEM_ADMIN") continue;
     const expectedCapabilityIds = capabilityCodes
       .map((code) => capabilityByCode.get(code))
       .filter((id): id is string => id !== undefined);
@@ -131,19 +141,22 @@ async function main() {
     create: { code: "NCC", name: "Nairobi City County" },
   });
 
-  const subcounty = await prisma.subcounty.upsert({
-    where: { code: "KIBRA" },
-    update: { name: "Kibra", countyId: county.id },
-    create: { code: "KIBRA", name: "Kibra", countyId: county.id },
-  });
+  for (const reference of NAIROBI_SUBCOUNTIES) {
+    const subcounty = await prisma.subcounty.upsert({
+      where: { code: reference.code },
+      update: { name: reference.name, countyId: county.id },
+      create: { code: reference.code, name: reference.name, countyId: county.id },
+    });
+    for (const ward of reference.wards) {
+      await prisma.ward.upsert({
+        where: { code: ward.code },
+        update: { name: ward.name, subcountyId: subcounty.id },
+        create: { code: ward.code, name: ward.name, subcountyId: subcounty.id },
+      });
+    }
+  }
 
-  await prisma.ward.upsert({
-    where: { code: "MAKINA" },
-    update: { name: "Makina", subcountyId: subcounty.id },
-    create: { code: "MAKINA", name: "Makina", subcountyId: subcounty.id },
-  });
-
-  console.log("Seed complete: capabilities, roles, county -> subcounty -> ward.");
+  console.log("Seed complete: capabilities, roles, Nairobi's 17 sub-counties and 85 wards.");
 }
 
 main()

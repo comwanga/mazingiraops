@@ -21,8 +21,8 @@ function runNode(script: string, args: string[], databaseUrl: string): void {
 
 /**
  * Rebuilds the test database: applies migrations, seeds reference data,
- * clears dynamic records and adds extra organisational scope (Mombasa
- * county, Langata subcounty + Woodley ward, Likoni) used by tenancy tests.
+ * clears dynamic records and adds Mombasa/Likoni as an out-of-county scope
+ * used by tenancy tests. Nairobi's complete hierarchy comes from the seed.
  */
 export async function resetDatabase(databaseUrl: string): Promise<void> {
   process.env.DATABASE_URL = databaseUrl;
@@ -62,23 +62,10 @@ export async function resetDatabase(databaseUrl: string): Promise<void> {
     // dataset is guaranteed.
     runNode(TSX_CLI, [DATABASE_SEED], databaseUrl);
 
-    const ncc = await prisma.county.findUniqueOrThrow({ where: { code: "NCC" } });
-
     const mombasa = await prisma.county.upsert({
       where: { code: "MOMBASA" },
       update: {},
       create: { code: "MOMBASA", name: "Mombasa County" },
-    });
-
-    const langata = await prisma.subcounty.upsert({
-      where: { code: "LANGATA" },
-      update: {},
-      create: { code: "LANGATA", name: "Langata", countyId: ncc.id },
-    });
-    await prisma.ward.upsert({
-      where: { code: "WOODLEY" },
-      update: {},
-      create: { code: "WOODLEY", name: "Woodley", subcountyId: langata.id },
     });
 
     const likoni = await prisma.subcounty.upsert({

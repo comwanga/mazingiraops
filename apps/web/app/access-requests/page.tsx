@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SYSTEM_ADMIN_CAPABILITIES } from "@ward-ops/contracts";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DashNav } from "@/components/DashNav";
@@ -40,7 +41,7 @@ const ROLE_OPTIONS: Array<{ code: RoleCode; label: string }> = [
 ];
 
 const USER_ROLE_OPTIONS: Array<{ code: RoleCode; label: string }> = [
-  { code: "SYSTEM_ADMIN", label: "System Administrator (County Superuser)" },
+  { code: "SYSTEM_ADMIN", label: "System Administrator (Account administration)" },
   ...ROLE_OPTIONS,
 ];
 
@@ -509,6 +510,7 @@ export default function AccessRequestsPage() {
           <h2 id="role-permissions-title">Role permissions</h2>
           <p className="muted-text">
             These capability bundles apply only within each user assignment&apos;s organisation scope.
+            System Administrator is fixed to account administration and read-only report access.
           </p>
           <div className="permission-role-list">
             {permissions.roles.map((role) => (
@@ -522,6 +524,7 @@ export default function AccessRequestsPage() {
                         <input
                           type="checkbox"
                           checked={checked}
+                          disabled={role.code === "SYSTEM_ADMIN"}
                           onChange={(event) => setRoleCapabilityDrafts((current) => ({
                             ...current,
                             [role.code]: event.target.checked
@@ -536,10 +539,12 @@ export default function AccessRequestsPage() {
                 </div>
                 <button
                   type="button"
-                  disabled={busy === `role-${role.code}`}
+                  disabled={busy === `role-${role.code}` || role.code === "SYSTEM_ADMIN"}
                   onClick={() => void saveRolePermissions(role.code)}
                 >
-                  {busy === `role-${role.code}` ? "Saving..." : "Save role permissions"}
+                  {role.code === "SYSTEM_ADMIN"
+                    ? `Fixed policy (${SYSTEM_ADMIN_CAPABILITIES.length} permissions)`
+                    : busy === `role-${role.code}` ? "Saving..." : "Save role permissions"}
                 </button>
               </details>
             ))}

@@ -2,7 +2,7 @@
   "name": "ward-ops",
   "version": "0.1.0",
   "private": true,
-  "description": "Multi-ward environment operations platform (Makina Ward -> Kibra Subcounty -> Nairobi City County)",
+  "description": "Nairobi City County environment operations platform for 17 sub-counties and 85 wards",
   "packageManager": "pnpm@8.15.9",
   "engines": {
     "node": ">=24"

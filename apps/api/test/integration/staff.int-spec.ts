@@ -34,7 +34,7 @@ describe("staff management (integration)", () => {
   let nccCounty: { id: string };
 
   let officer: { cookie: string | null; csrf: string | null };
-  let admin: { cookie: string | null; csrf: string | null };
+  let countyOperator: { cookie: string | null; csrf: string | null };
 
   beforeAll(async () => {
     prisma = new PrismaClient();
@@ -69,18 +69,18 @@ describe("staff management (integration)", () => {
     expect(officer.user).toBeDefined();
     expect(officer.cookie).toBeTruthy();
 
-    const adminUserId = await createUserWithAssignment(prisma, {
-      email: "admin@makina.test",
+    const countyOperatorId = await createUserWithAssignment(prisma, {
+      email: "county.operator@makina.test",
       password: PASSWORD,
-      displayName: "System Admin",
-      roleCode: "SYSTEM_ADMIN",
+      displayName: "County Staff Operator",
+      roleCode: "WARD_OFFICER",
       scopeType: "COUNTY",
       scopeId: nccCounty.id,
     });
-    admin = await login(app, "admin@makina.test", PASSWORD);
-    expect(admin.cookie).toBeTruthy();
+    countyOperator = await login(app, "county.operator@makina.test", PASSWORD);
+    expect(countyOperator.cookie).toBeTruthy();
     void officerUserId;
-    void adminUserId;
+    void countyOperatorId;
   });
 
   it("creates staff in the assigned ward", async () => {
@@ -250,8 +250,8 @@ describe("staff management (integration)", () => {
     const response = await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: woodleyWard.id },
     });
     expect(response.statusCode).toBe(201);
@@ -270,8 +270,8 @@ describe("staff management (integration)", () => {
     const toHome = await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: makinaWard.id },
     });
     expect(toHome.statusCode).toBe(409);
@@ -279,15 +279,15 @@ describe("staff management (integration)", () => {
     await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: woodleyWard.id },
     });
     const duplicate = await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: woodleyWard.id },
     });
     expect(duplicate.statusCode).toBe(409);
@@ -303,8 +303,8 @@ describe("staff management (integration)", () => {
     const temporary = await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: woodleyWard.id, type: "TEMPORARY" },
     });
     expect(temporary.statusCode).toBe(201);
@@ -313,8 +313,8 @@ describe("staff management (integration)", () => {
     const transferred = await api(app, {
       method: "POST",
       url: `/api/v1/staff/${employeeId}/assignments`,
-      cookie: admin.cookie,
-      csrf: admin.csrf,
+      cookie: countyOperator.cookie,
+      csrf: countyOperator.csrf,
       payload: { wardId: woodleyWard.id, type: "TRANSFER" },
     });
     expect(transferred.statusCode).toBe(201);

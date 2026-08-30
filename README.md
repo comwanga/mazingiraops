@@ -18,7 +18,7 @@ Deployment definitions live under [`infrastructure/`](infrastructure/), design a
 
 ### Staff and access management
 
-- One-time system owner setup at `/setup` using a private `OWNER_SETUP_TOKEN`.
+- One-time system owner setup using API-side bootstrap credentials with a mandatory first-login password change, or `/setup` with a private `OWNER_SETUP_TOKEN`.
 - Visitor access requests at `/register`, approved or rejected by the owner under **User access**.
 - Owner-controlled access with scoped roles (system admin, ward officer, subcounty reviewer, HR viewer, read-only).
 - Read-only benchmark accounts cannot create, change, approve or export operational records.
@@ -72,7 +72,7 @@ pnpm dev:api           # NestJS API on :4000
 pnpm dev:web           # Next.js web on :3000
 ```
 
-Open `http://localhost:3000`. First-time setup runs at `/setup` using the value of `OWNER_SETUP_TOKEN`.
+Open `http://localhost:3000`. First-time setup can use paired `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` values (the temporary password must be changed immediately after sign-in), or the interactive `/setup` flow with `OWNER_SETUP_TOKEN`.
 
 ## Environment Variables
 
@@ -82,6 +82,8 @@ See [`.env.example`](.env.example) for the complete list. Key variables:
 APP_ENV=development
 DATABASE_URL=postgresql://ward_ops:ward_ops@localhost:5432/ward_ops
 OWNER_SETUP_TOKEN=<random one-time token for /setup>
+BOOTSTRAP_ADMIN_EMAIL=<initial administrator email>
+BOOTSTRAP_ADMIN_PASSWORD=<temporary password; configure on the API only>
 PUBLIC_BASE_URL=https://your-web-domain.example.go.ke  # required in production for QR links
 S3_BUCKET=             # required in production, along with S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY
 SECURE_COOKIES=true    # required in production

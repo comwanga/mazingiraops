@@ -44,10 +44,9 @@ services:
     build:
       context: ..
       dockerfile: infrastructure/Dockerfile.web
-      args:
-        API_INTERNAL_URL: http://api:4000
     environment:
       NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
     ports:
       - "3000:3000"
     depends_on:

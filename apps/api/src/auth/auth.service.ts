@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, OnApplicationBootstrap, UnauthorizedException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { APP_CONFIG } from "../config/config.module";
 import type { AppConfig } from "../config/config";
@@ -28,7 +28,9 @@ export interface LoginResult {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     private readonly prisma: PrismaService,
@@ -36,6 +38,138 @@ export class AuthService {
     private readonly ipThrottle: IpThrottleService,
     private readonly audit: AuditService,
   ) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.ensureBootstrapAdmin();
+  }
+
+  async ensureBootstrapAdmin(): Promise<void> {
+    const bootstrap = this.config.bootstrapAdmin;
+    if (!bootstrap) return;
+
+    const existingAdmin = await this.prisma.client.user.findFirst({
+      where: { assignments: { some: { role: { code: "SYSTEM_ADMIN" } } } },
+      select: {
+        id: true,
+        email: true,
+        assignments: {
+          where: { role: { code: "SYSTEM_ADMIN" } },
+          select: { countyId: true },
+          take: 1,
+        },
+      },
+    });
+    if (existingAdmin) {
+      if (existingAdmin.email !== bootstrap.email) {
+        this.logger.warn(
+          "A system administrator already exists; bootstrap credentials were not applied",
+        );
+        return;
+      }
+
+      const alreadyApplied = await this.prisma.client.auditEvent.findFirst({
+        where: {
+          action: "AUTH.BOOTSTRAP_ENV",
+          targetType: "User",
+          targetId: existingAdmin.id,
+        },
+        select: { id: true },
+      });
+      if (alreadyApplied) return;
+
+      await this.prisma.client.$transaction(async (transaction) => {
+        await transaction.user.update({
+          where: { id: existingAdmin.id },
+          data: {
+            displayName: bootstrap.displayName,
+            passwordHash: hashPassword(bootstrap.password),
+            active: true,
+            mustChangePassword: true,
+          },
+        });
+        await transaction.userSession.updateMany({
+          where: { userId: existingAdmin.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        const countyId = existingAdmin.assignments[0]?.countyId ?? null;
+        await this.audit.record(
+          {
+            action: "AUTH.BOOTSTRAP_ENV",
+            targetType: "User",
+            targetId: existingAdmin.id,
+            scopeType: countyId ? "COUNTY" : null,
+            scopeId: countyId,
+            details: "Existing system administrator reconciled with deployment bootstrap credentials",
+          },
+          transaction,
+        );
+      });
+      this.logger.log(
+        "Existing system administrator reconciled once; password change is required",
+      );
+      return;
+    }
+
+    const [county, role] = await Promise.all([
+      this.prisma.client.county.findFirst({ where: { code: "NCC" } }),
+      this.prisma.client.role.findUnique({ where: { code: "SYSTEM_ADMIN" } }),
+    ]);
+    if (!county || !role) {
+      throw new Error("Bootstrap administrator requires seeded NCC and SYSTEM_ADMIN records");
+    }
+
+    const user = await this.prisma.client.user.findUnique({
+      where: { email: bootstrap.email },
+    });
+    await this.prisma.client.$transaction(async (transaction) => {
+      const created = user
+        ? await transaction.user.update({
+            where: { id: user.id },
+            data: {
+              displayName: bootstrap.displayName,
+              passwordHash: hashPassword(bootstrap.password),
+              active: true,
+              mustChangePassword: true,
+              assignments: {
+                create: {
+                  roleId: role.id,
+                  scopeType: "COUNTY",
+                  countyId: county.id,
+                },
+              },
+            },
+          })
+        : await transaction.user.create({
+            data: {
+              email: bootstrap.email,
+              displayName: bootstrap.displayName,
+              passwordHash: hashPassword(bootstrap.password),
+              active: true,
+              mustChangePassword: true,
+              assignments: {
+                create: {
+                  roleId: role.id,
+                  scopeType: "COUNTY",
+                  countyId: county.id,
+                },
+              },
+            },
+          });
+
+      await this.audit.record(
+        {
+          action: "AUTH.BOOTSTRAP_ENV",
+          targetType: "User",
+          targetId: created.id,
+          scopeType: "COUNTY",
+          scopeId: county.id,
+          details: "System administrator created from deployment bootstrap credentials",
+        },
+        transaction,
+      );
+    });
+    this.logger.log("System administrator bootstrap completed; password change is required");
+  }
 
   async bootstrapAdmin(
     input: {

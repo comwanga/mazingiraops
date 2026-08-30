@@ -1,8 +1,23 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { PrismaClient } from "@ward-ops/database";
 
 const REPO_ROOT = path.resolve(process.cwd(), "../..");
+const PRISMA_CLI = path.join(
+  REPO_ROOT,
+  "packages/database/node_modules/prisma/build/index.js",
+);
+const PRISMA_SCHEMA = path.join(REPO_ROOT, "packages/database/prisma/schema.prisma");
+const TSX_CLI = path.join(REPO_ROOT, "packages/database/node_modules/tsx/dist/cli.mjs");
+const DATABASE_SEED = path.join(REPO_ROOT, "packages/database/src/seed.ts");
+
+function runNode(script: string, args: string[], databaseUrl: string): void {
+  execFileSync(process.execPath, [script, ...args], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    stdio: "inherit",
+  });
+}
 
 /**
  * Rebuilds the test database: applies migrations, seeds reference data,
@@ -11,11 +26,7 @@ const REPO_ROOT = path.resolve(process.cwd(), "../..");
  */
 export async function resetDatabase(databaseUrl: string): Promise<void> {
   process.env.DATABASE_URL = databaseUrl;
-  execSync("pnpm --filter @ward-ops/database db:deploy", {
-    cwd: REPO_ROOT,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    stdio: "inherit",
-  });
+  runNode(PRISMA_CLI, ["migrate", "deploy", "--schema", PRISMA_SCHEMA], databaseUrl);
 
   const prisma = new PrismaClient();
   try {
@@ -49,11 +60,7 @@ export async function resetDatabase(databaseUrl: string): Promise<void> {
     // Reference data (capabilities, roles, role capabilities, county ->
     // subcounty -> ward) is rebuilt after the deletes so a fresh, complete
     // dataset is guaranteed.
-    execSync("pnpm --filter @ward-ops/database db:seed", {
-      cwd: REPO_ROOT,
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-      stdio: "inherit",
-    });
+    runNode(TSX_CLI, [DATABASE_SEED], databaseUrl);
 
     const ncc = await prisma.county.findUniqueOrThrow({ where: { code: "NCC" } });
 

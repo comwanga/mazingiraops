@@ -6,7 +6,7 @@
 2. Select `main` as the production branch and enable automatic deployments.
 3. Create three services:
    - **api**: connects to the repository. `railway.json` builds `infrastructure/Dockerfile.api`, applies migrations and reference seed data in Railway's pre-deploy phase, starts the API on its assigned `PORT`, and checks `/health/ready` before promotion. Leave dashboard build/deploy command overrides empty so the checked-in configuration remains authoritative.
-   - **web**: connects to the repository. Set its config-file path to `infrastructure/railway.web.json`. Add `API_INTERNAL_URL` as a build variable pointing to the API service's Railway private-network origin (for example `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}`; replace `api` if the service has a different name). The Next.js server proxies browser requests through the web origin.
+   - **web**: connects to the repository. Set its config-file path to `infrastructure/railway.web.json`. Add `API_INTERNAL_URL` as a runtime variable pointing to the API service's Railway private-network origin (for example `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000`; replace `api` if the service has a different name or port). The Next.js server proxies browser requests through the web origin.
    - **PostgreSQL**: add a Postgres service to the same Railway project.
 4. Add the variables listed below to the api service.
 5. Generate a public domain for the web service. An API public domain is optional because web-to-API traffic uses Railway private networking.
@@ -24,6 +24,9 @@ S3_ACCESS_KEY_ID=<your S3 access key id>
 S3_SECRET_ACCESS_KEY=<your S3 secret access key>
 S3_REGION=<your bucket region>
 OWNER_SETUP_TOKEN=<a separate random one-time token of at least 32 characters>
+BOOTSTRAP_ADMIN_EMAIL=<initial system administrator email>
+BOOTSTRAP_ADMIN_PASSWORD=<temporary password of at least 12 characters>
+BOOTSTRAP_ADMIN_NAME=<administrator display name; optional>
 ```
 
 `PUBLIC_BASE_URL` must be the public **web** origin because attendance QR codes link to the web app's `/check-in/{token}` screen. It is required and must use HTTPS in production. If the web service is not named `web`, update the Railway variable reference accordingly. For a custom domain use:
@@ -34,13 +37,15 @@ PUBLIC_BASE_URL=https://your-approved-domain.example.go.ke
 
 The S3 credential must allow at least `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` and `s3:ListBucket` on the bucket. `s3:ListBucket` is required by both evidence reconciliation and the `/health/ready` storage probe, so a credential that only allows object operations will keep the deployment unhealthy.
 
-`NEXT_PUBLIC_API_URL` remains supported for older deployments, but `API_INTERNAL_URL` is preferred because the API URL is consumed by the Next.js server-side proxy and does not need to be public.
+`NEXT_PUBLIC_API_URL` remains supported for older deployments, but `API_INTERNAL_URL` is preferred because the runtime Next.js route handler proxies browser requests over Railway private networking. `API_INTERNAL_URL` must be configured on the **web** service; bootstrap administrator variables belong only on the **api** service.
 
 > Railway has deprecated legacy Config as Code (`railway.json`) for removal on 1 December 2026. These files remain supported for the current deployment, but the project must migrate the two service definitions to Railway Infrastructure as Code before that date.
 
 ## First-time setup
 
-After deployment, open `/setup` on the web domain, enter `OWNER_SETUP_TOKEN`, and create your permanent owner name, email and password. When setup completes, sign in with the account you just created. Remove `OWNER_SETUP_TOKEN` from Railway after setup and redeploy.
+When `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` are present on the api service, startup creates the first system administrator if none exists. If a matching administrator predates this mechanism, it is reconciled once and existing sessions are revoked. The password is temporary: the first successful sign-in is restricted to `/account/password` until it is replaced. An `AUTH.BOOTSTRAP_ENV` audit marker prevents every later deployment from resetting the changed password. After the password is changed, remove both bootstrap variables and redeploy so the temporary secret is no longer retained in Railway.
+
+The interactive `/setup` flow using `OWNER_SETUP_TOKEN` remains available as an alternative when bootstrap administrator credentials are omitted. Do not configure both mechanisms for a new environment. Remove `OWNER_SETUP_TOKEN` after interactive setup completes.
 
 Visitors use `/register` to request access. They cannot sign in until an authorized reviewer approves them under **User access** and explicitly selects the role and scope. New accounts must change their password on first sign-in.
 
@@ -80,6 +85,6 @@ The integration sends only the reporting period, attendance totals, and structur
 
 1. Open `/health/ready` on the api domain and confirm `{"status":"ready"}`.
 2. Open the web domain and confirm it loads and reaches the API (sign-in page renders).
-3. Open `/setup` on the web domain, complete owner setup with `OWNER_SETUP_TOKEN`, and sign in.
+3. Sign in with the temporary bootstrap administrator credentials and confirm immediate redirection to `/account/password` (or complete the alternative `/setup` flow).
 4. Generate an attendance QR and verify that its link uses the Railway or custom HTTPS domain.
 5. Upload and download a synthetic medical document, redeploy, and confirm the file remains available from S3.

@@ -8,6 +8,7 @@ import {
   extendAttendanceSession,
   listStaff,
   listAttendance,
+  listSessions,
   listPublicOrganisations,
   listUsers,
   login,
@@ -31,7 +32,7 @@ import {
   createEvidenceFileSelection,
   evidenceUploadKey,
 } from "@/lib/work-log-evidence";
-import { buildDailyReportHref, readDailyReportPrefill } from "@/lib/report-navigation";
+import { buildAttendanceReportHref, buildDailyReportHref, readDailyReportPrefill } from "@/lib/report-navigation";
 
 describe("capability-aware navigation", () => {
   it("only exposes modules granted to the account", () => {
@@ -127,6 +128,18 @@ describe("attendance API filters", () => {
       expect.objectContaining({ credentials: "include" }),
     );
   });
+
+  it("requests only the selected ward's latest session for the live register", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => "[]" });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listSessions({ wardId: "ward-makina", workDate: "2026-08-31", pageSize: 1 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/attendance/sessions?wardId=ward-makina&workDate=2026-08-31&pageSize=1",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
 });
 
 describe("attendance session setup", () => {
@@ -206,6 +219,21 @@ describe("work-log report handoff", () => {
     const url = new URL(href, "https://mazingira.example");
 
     expect(url.pathname).toBe("/reports");
+    expect(readDailyReportPrefill(url.search)).toEqual({
+      scopeType: "WARD",
+      scopeId: "ward-makina",
+      startDate: "2026-08-31",
+      endDate: "2026-08-31",
+      kind: "DAILY",
+      preview: true,
+    });
+  });
+
+  it("builds a daily report prefill from a completed attendance register", () => {
+    const href = buildAttendanceReportHref("ward-makina", "2026-08-31");
+    const url = new URL(href, "https://mazingira.example");
+
+    expect(url.searchParams.get("source")).toBe("attendance");
     expect(readDailyReportPrefill(url.search)).toEqual({
       scopeType: "WARD",
       scopeId: "ward-makina",

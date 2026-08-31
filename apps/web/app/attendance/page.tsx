@@ -6,13 +6,13 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { DashNav } from "@/components/DashNav";
 import { QrCode } from "@/components/QrCode";
 import { StatusMessages } from "@/components/StatusMessages";
+import { buildAttendanceReportHref } from "@/lib/report-navigation";
 import {
   buildAttendanceSessionInput,
   resolveAttendanceWardId,
 } from "@/lib/attendance-session";
 import {
   ApiError,
-  AttendanceRecord,
   AttendanceSession,
   RosterRow,
   Ward,
@@ -23,7 +23,6 @@ import {
   extendAttendanceSession,
   fetchMe,
   fetchRoster,
-  listAttendance,
   listSessions,
   listWards,
   manualAttendance,
@@ -67,13 +66,13 @@ function formatAbsenceReason(value: RosterRow["absenceReason"]): string {
 export default function AttendancePage() {
   const router = useRouter();
   const [canManage, setCanManage] = useState(false);
-  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [canGenerateReports, setCanGenerateReports] = useState(false);
+  const [latestSession, setLatestSession] = useState<AttendanceSession | null>(null);
   const [roster, setRoster] = useState<RosterRow[] | null>(null);
   const [wards, setWards] = useState<Ward[]>([]);
   const [qrSession, setQrSession] = useState<AttendanceSession | null>(null);
   const [manualEmployee, setManualEmployee] = useState<RosterRow | null>(null);
-  const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null);
+  const [correctionRecord, setCorrectionRecord] = useState<RosterRow | null>(null);
   const [pendingReview, setPendingReview] = useState<{ row: RosterRow; action: "APPROVE" | "REJECT" } | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +81,6 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ wardId: "", durationMinutes: 120 });
   const [rosterDate, setRosterDate] = useState(nairobiToday());
-  const [history, setHistory] = useState({ wardId: "", workDate: "" });
   const [manualForm, setManualForm] = useState({ status: "PRESENT", reason: "" });
   const [correctionForm, setCorrectionForm] = useState({ status: "PRESENT", reason: "" });
 
@@ -103,18 +101,20 @@ export default function AttendancePage() {
       }
       const manageable = me.capabilities.includes("ATTENDANCE_MANAGE");
       setCanManage(manageable);
-      const [sessionList, recordList, accessible] = await Promise.all([
-        listSessions(),
-        listAttendance(),
-        listWards(),
-      ]);
-      setSessions(sessionList);
-      setRecords(recordList);
+      setCanGenerateReports(me.capabilities.includes("REPORTS_GENERATE"));
+      const accessible = await listWards();
       setWards(accessible);
-      setForm((current) => ({
-        ...current,
-        wardId: resolveAttendanceWardId(accessible, me.assignments, current.wardId),
-      }));
+      const wardId = resolveAttendanceWardId(accessible, me.assignments, "");
+      setForm((current) => ({ ...current, wardId }));
+      if (wardId) {
+        const workDate = nairobiToday();
+        const [sessionList, rosterRows] = await Promise.all([
+          listSessions({ wardId, workDate, pageSize: 1 }),
+          fetchRoster(wardId, workDate),
+        ]);
+        setLatestSession(sessionList[0] ?? null);
+        setRoster(rosterRows);
+      }
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) router.replace("/login");
       else setError(apiErrorMessage(caught, "Unable to load attendance"));
@@ -126,6 +126,30 @@ export default function AttendancePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!form.wardId) return;
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const [sessionList, rosterRows] = await Promise.all([
+          listSessions({ wardId: form.wardId, workDate: rosterDate, pageSize: 1 }),
+          fetchRoster(form.wardId, rosterDate),
+        ]);
+        if (!cancelled) {
+          setLatestSession(sessionList[0] ?? null);
+          setRoster(rosterRows);
+        }
+      } catch {
+        // The visible manual refresh reports errors. Background refreshes stay quiet.
+      }
+    };
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [form.wardId, rosterDate]);
 
   async function onCreateSession(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,7 +172,12 @@ export default function AttendancePage() {
           name: "Selected ward",
         },
       });
-      setSessions(await listSessions());
+      setLatestSession({
+        ...session,
+        active: true,
+        ward: session.ward ?? ward,
+      });
+      setRoster(await fetchRoster(session.wardId, rosterDate));
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to open session"));
     } finally {
@@ -166,7 +195,12 @@ export default function AttendancePage() {
       return;
     }
     try {
-      setRoster(await fetchRoster(wardId, workDate));
+      const [sessionList, rosterRows] = await Promise.all([
+        listSessions({ wardId, workDate, pageSize: 1 }),
+        fetchRoster(wardId, workDate),
+      ]);
+      setLatestSession(sessionList[0] ?? null);
+      setRoster(rosterRows);
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to load roster"));
     }
@@ -194,7 +228,6 @@ export default function AttendancePage() {
       setManualEmployee(null);
       setManualForm({ status: "PRESENT", reason: "" });
       setRoster(await fetchRoster(form.wardId, rosterDate));
-      setRecords(await listAttendance(history));
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to record attendance"));
     } finally {
@@ -208,7 +241,7 @@ export default function AttendancePage() {
       await closeAttendanceSession(session.id);
       setQrSession(null);
       setNotice(`${session.ward.name} attendance session closed.`);
-      setSessions(await listSessions());
+      await loadRoster(session.wardId, rosterDate);
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to close attendance session"));
     }
@@ -220,7 +253,7 @@ export default function AttendancePage() {
       const result = await extendAttendanceSession(session.id, 30);
       const update = (current: AttendanceSession) => ({ ...current, closesAt: result.closesAt, active: true });
       setQrSession((current) => current?.id === session.id ? update(current) : current);
-      setSessions((current) => current.map((item) => item.id === session.id ? update(item) : item));
+      setLatestSession((current) => current?.id === session.id ? update(current) : current);
       setNotice("Attendance session extended by 30 minutes.");
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to extend attendance session"));
@@ -245,7 +278,6 @@ export default function AttendancePage() {
       setPendingReview(null);
       setReviewNote("");
       setRoster(await fetchRoster(form.wardId, rosterDate));
-      setRecords(await listAttendance({ wardId: history.wardId || undefined, workDate: history.workDate || undefined }));
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to review absence declaration"));
     } finally {
@@ -253,34 +285,20 @@ export default function AttendancePage() {
     }
   }
 
-  async function onFilterHistory(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    try {
-      setRecords(await listAttendance({
-        wardId: history.wardId || undefined,
-        workDate: history.workDate || undefined,
-      }));
-    } catch (caught) {
-      setError(apiErrorMessage(caught, "Unable to load attendance history"));
-    }
-  }
-
   async function onCorrectAttendance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!correctionRecord) return;
+    if (!correctionRecord?.attendanceId || !correctionRecord.sessionId) return;
     setSubmitting(true);
     setError(null);
     try {
-      await correctAttendance(correctionRecord.id, {
+      await correctAttendance(correctionRecord.attendanceId, {
         sessionId: correctionRecord.sessionId,
         status: correctionForm.status,
         reason: correctionForm.reason,
       });
-      setNotice(`Corrected attendance for ${correctionRecord.fullName}.`);
+      setNotice(`Corrected attendance for ${correctionRecord.employee.fullName}.`);
       setCorrectionRecord(null);
       setCorrectionForm({ status: "PRESENT", reason: "" });
-      setRecords(await listAttendance({ wardId: history.wardId || undefined, workDate: history.workDate || undefined }));
       if (form.wardId) setRoster(await fetchRoster(form.wardId, rosterDate));
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to correct attendance"));
@@ -291,6 +309,11 @@ export default function AttendancePage() {
 
   const checkInUrl = (session: AttendanceSession) =>
     `${window.location.origin}/check-in/${session.token}`;
+  const activeSession = latestSession && latestSession.active && Date.parse(latestSession.closesAt) > Date.now()
+    ? latestSession
+    : null;
+  const pendingApprovalCount = roster?.filter((row) => row.approvalAllowed).length ?? 0;
+  const registerComplete = Boolean(latestSession && !activeSession && pendingApprovalCount === 0);
 
   return (
     <main className="dashboard" aria-busy={loading}>
@@ -308,42 +331,40 @@ export default function AttendancePage() {
           <form className="grid-form" onSubmit={onCreateSession}>
             <label>Ward{wards.length <= 1 ? <input value={wards[0] ? `${wards[0].name} (${wards[0].code})` : "No ward assigned"} readOnly aria-readonly="true" /> : <select value={form.wardId} onChange={(event) => setForm({ ...form, wardId: event.target.value })} required><option value="">Select ward...</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select>}</label>
             <label>Duration (minutes)<select value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })}>{DURATIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes}</option>)}</select></label>
-            <button type="submit" disabled={submitting || !form.wardId}>{submitting ? "Opening..." : "Open session"}</button>
+            <button type="submit" disabled={submitting || !form.wardId || Boolean(activeSession)}>{submitting ? "Opening..." : activeSession ? "Session already active" : "Open session"}</button>
           </form>
         </section>
       )}
 
       <section className="panel">
-        <h2>Attendance sessions</h2>
-        {sessions.length === 0 ? (!loading && <p className="empty">No sessions have been opened.</p>) : (
-          <div className="table-wrap"><table className="data-table"><thead><tr><th>Ward</th><th>Location</th><th>Opens</th><th>Closes</th>{canManage && <th>Check-in</th>}</tr></thead><tbody>{sessions.map((session) => (
-            <tr key={session.id}><td>{session.ward.code}</td><td>{session.location}</td><td>{formatTime(session.opensAt)}</td><td>{formatTime(session.closesAt)}</td>{canManage && <td>{session.token ? <button type="button" className="link-btn" onClick={() => setQrSession(session)}>{Date.parse(session.closesAt) > Date.now() ? "Show QR" : "View"}</button> : <span className="muted-text">Unavailable</span>}</td>}</tr>
-          ))}</tbody></table></div>
+        <h2>Active attendance session</h2>
+        {!activeSession ? (!loading && <p className="empty">No attendance session is currently open for this ward.</p>) : (
+          <div className="active-session-card">
+            <div><span className="eyebrow">{activeSession.ward.code}</span><strong>{activeSession.ward.name}</strong><span>{formatTime(activeSession.opensAt)}–{formatTime(activeSession.closesAt)}</span></div>
+            {canManage && activeSession.token && <button type="button" onClick={() => setQrSession(activeSession)}>Show QR</button>}
+          </div>
         )}
       </section>
 
       <section className="panel">
         <h2>Daily attendance register</h2>
-        <p className="muted-text">All assigned staff are listed. Employee absence declarations require your approval.</p>
+        <p className="muted-text">This is the authoritative register and refreshes automatically as employees check in.</p>
         <div className="filter-row">
           <label>Ward<select value={form.wardId} onChange={(event) => void loadRoster(event.target.value)}><option value="">Select ward...</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select></label>
           <label>Date<input type="date" value={rosterDate} onChange={(event) => void loadRoster(form.wardId, event.target.value)} /></label>
           <button type="button" className="secondary-btn" disabled={!form.wardId} onClick={() => void loadRoster(form.wardId)}>Refresh roster</button>
         </div>
+        {activeSession && <div className="attendance-state live" role="status"><strong>Check-in is live.</strong><span>The register updates every five seconds until {formatTime(activeSession.closesAt)}.</span></div>}
+        {latestSession && !activeSession && pendingApprovalCount > 0 && <div className="attendance-state action-required" role="alert"><strong>Action required before reporting</strong><span>{pendingApprovalCount} absence {pendingApprovalCount === 1 ? "declaration requires" : "declarations require"} Ward Environment Officer approval. The final report remains locked until every review is resolved.</span></div>}
+        {registerComplete && <div className="attendance-state complete" role="status"><strong>Attendance register complete</strong><span>Check-in has closed and every attendance review is resolved.</span>{canGenerateReports && <button type="button" onClick={() => router.push(buildAttendanceReportHref(form.wardId, rosterDate))}>Generate attendance report</button>}</div>}
         {!roster && <p className="empty">Select a ward to view its roster.</p>}
         {roster && roster.length === 0 && <p className="empty">No active staff are assigned to this ward.</p>}
-        {roster && roster.length > 0 && <div className="table-wrap"><table className="data-table"><thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Detail</th>{canManage && <th>Action</th>}</tr></thead><tbody>{roster.map((row) => <tr key={row.employee.id}><td>{row.employee.employeeNumber}</td><td>{row.employee.fullName}</td><td><span className={`badge ${row.status.toLowerCase()}`}>{row.status.replace(/_/g, " ")}</span></td><td>{row.detail}</td>{canManage && <td>{row.approvalAllowed ? <div className="doc-actions"><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "APPROVE" }); setReviewNote(""); }}>Approve</button><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "REJECT" }); setReviewNote(""); }}>Reject</button></div> : row.manualEditable ? <button type="button" className="link-btn" onClick={() => setManualEmployee(row)}>Record manually</button> : <span className="muted-text">Recorded</span>}</td>}</tr>)}</tbody></table></div>}
+        {roster && roster.length > 0 && <div className="table-wrap"><table className="data-table"><thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Detail</th>{canManage && <th>Action</th>}</tr></thead><tbody>{roster.map((row) => <tr key={row.employee.id}><td>{row.employee.employeeNumber}</td><td>{row.employee.fullName}</td><td><span className={`badge ${row.status.toLowerCase()}`}>{row.status.replace(/_/g, " ")}</span></td><td>{row.detail}</td>{canManage && <td>{row.approvalAllowed ? <div className="doc-actions"><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "APPROVE" }); setReviewNote(""); }}>Approve</button><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "REJECT" }); setReviewNote(""); }}>Reject</button></div> : row.correctionAllowed ? <button type="button" className="link-btn" onClick={() => { setCorrectionRecord(row); setCorrectionForm({ status: row.status, reason: "" }); }}>Correct</button> : row.manualEditable ? <button type="button" className="link-btn" onClick={() => setManualEmployee(row)}>Record manually</button> : <span className="muted-text">Recorded</span>}</td>}</tr>)}</tbody></table></div>}
 
         {pendingReview && <form className="manual-form" onSubmit={onReviewAbsence} aria-labelledby="absence-review-title"><div><h3 id="absence-review-title">{pendingReview.action === "APPROVE" ? "Approve" : "Reject"} {formatAbsenceReason(pendingReview.row.absenceReason)}</h3><p className="muted-text">Reviewing {pendingReview.row.employee.fullName}&apos;s employee-submitted declaration.</p></div>{pendingReview.action === "REJECT" && <label>Rejection reason<input value={reviewNote} minLength={5} maxLength={2000} onChange={(event) => setReviewNote(event.target.value)} required /></label>}<div className="dialog-actions"><button type="button" className="secondary-btn" onClick={() => { setPendingReview(null); setReviewNote(""); }}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? "Saving..." : pendingReview.action === "APPROVE" ? "Approve declaration" : "Reject declaration"}</button></div></form>}
 
         {manualEmployee && <form className="manual-form" onSubmit={onManualAttendance} aria-labelledby="manual-title"><div><h3 id="manual-title">Manual attendance for {manualEmployee.employee.fullName}</h3><p className="muted-text">Use only when a staff member could not use the QR check-in.</p></div><label>Status<select value={manualForm.status} onChange={(event) => setManualForm({ ...manualForm, status: event.target.value })}>{MANUAL_STATUSES.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").toLowerCase()}</option>)}</select></label><label>Reason<input value={manualForm.reason} minLength={5} onChange={(event) => setManualForm({ ...manualForm, reason: event.target.value })} required /></label><div className="dialog-actions"><button type="button" className="secondary-btn" onClick={() => setManualEmployee(null)}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Record attendance"}</button></div></form>}
-      </section>
-
-      <section className="panel">
-        <h2>Attendance history</h2>
-        <form className="filter-row" onSubmit={onFilterHistory}><label>Ward<select value={history.wardId} onChange={(event) => setHistory({ ...history, wardId: event.target.value })}><option value="">All accessible wards</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select></label><label>Date<input type="date" value={history.workDate} onChange={(event) => setHistory({ ...history, workDate: event.target.value })} /></label><button type="submit" className="secondary-btn">Apply filters</button></form>
-        {records.length === 0 ? (!loading && <p className="empty">No attendance records match these filters.</p>) : <div className="table-wrap"><table className="data-table"><thead><tr><th>Date</th><th>Employee</th><th>Status</th><th>Review</th><th>Recorded at</th><th>Method</th>{canManage && <th>Action</th>}</tr></thead><tbody>{records.map((record) => <tr key={record.id}><td>{record.workDate.slice(0, 10)}</td><td>{record.fullName} <span className="muted-text">({record.employeeNumber})</span></td><td><span className={`badge ${record.status.toLowerCase()}`}>{record.status.replace(/_/g, " ")}</span></td><td>{record.absenceReason ? `${formatAbsenceReason(record.absenceReason)} · ${record.absenceReviewStatus?.toLowerCase()}` : "—"}</td><td>{formatTime(record.checkedAt)}</td><td>{record.verificationMethod.toLowerCase()}</td>{canManage && <td>{record.absenceReviewStatus === "PENDING" ? <span className="muted-text">Review in daily register</span> : <button type="button" className="link-btn" onClick={() => { setCorrectionRecord(record); setCorrectionForm({ status: record.status, reason: "" }); }}>Correct</button>}</td>}</tr>)}</tbody></table></div>}
-        {correctionRecord && <form className="manual-form" onSubmit={onCorrectAttendance} aria-labelledby="correction-title"><div><h3 id="correction-title">Correct {correctionRecord.fullName}&apos;s record</h3><p className="muted-text">The original value remains in the audit history.</p></div><label>Status<select value={correctionForm.status} onChange={(event) => setCorrectionForm({ ...correctionForm, status: event.target.value })}>{[...MANUAL_STATUSES, "LATE"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").toLowerCase()}</option>)}</select></label><label>Correction reason<input value={correctionForm.reason} minLength={5} maxLength={2000} onChange={(event) => setCorrectionForm({ ...correctionForm, reason: event.target.value })} required /></label><div className="dialog-actions"><button type="button" className="secondary-btn" onClick={() => setCorrectionRecord(null)}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Save correction"}</button></div></form>}
+        {correctionRecord && <form className="manual-form" onSubmit={onCorrectAttendance} aria-labelledby="correction-title"><div><h3 id="correction-title">Correct {correctionRecord.employee.fullName}&apos;s record</h3><p className="muted-text">The original value remains in the audit history.</p></div><label>Status<select value={correctionForm.status} onChange={(event) => setCorrectionForm({ ...correctionForm, status: event.target.value })}>{[...MANUAL_STATUSES, "LATE"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").toLowerCase()}</option>)}</select></label><label>Correction reason<input value={correctionForm.reason} minLength={5} maxLength={2000} onChange={(event) => setCorrectionForm({ ...correctionForm, reason: event.target.value })} required /></label><div className="dialog-actions"><button type="button" className="secondary-btn" onClick={() => setCorrectionRecord(null)}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? "Saving..." : "Save correction"}</button></div></form>}
       </section>
 
       {qrSession?.token && <AttendanceQrDialog session={qrSession} url={checkInUrl(qrSession)} onClose={() => setQrSession(null)} onCloseSession={onCloseSession} onExtendSession={onExtendSession} onNotice={setNotice} />}

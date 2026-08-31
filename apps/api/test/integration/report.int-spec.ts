@@ -305,6 +305,75 @@ describe("reports (integration)", () => {
     expect(allowed.statusCode).toBe(201);
   });
 
+  it("blocks finalization while an attendance session is still active", async () => {
+    const workDate = "2099-01-05";
+    await prisma.attendanceSession.create({
+      data: {
+        token: "active-report-session-token",
+        wardId: makinaWard.id,
+        workDate: new Date(`${workDate}T00:00:00.000Z`),
+        activity: "Ward attendance",
+        location: "Makina Ward",
+        opensAt: new Date(),
+        closesAt: new Date(Date.now() + 30 * 60 * 1000),
+        createdBy: "test",
+      },
+    });
+
+    const response = await api(app, {
+      method: "POST",
+      url: "/api/v1/reports",
+      cookie: reviewer.cookie,
+      csrf: reviewer.csrf,
+      payload: { scopeType: "WARD", scopeId: makinaWard.id, startDate: workDate, endDate: workDate, kind: "DAILY" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toContain("Attendance is still open");
+  });
+
+  it("notifies through a conflict and blocks finalization until attendance reviews are resolved", async () => {
+    const employeeId = await createEmployee("20250100100", "Pending Sick Staff", makinaWard.id);
+    const session = await createSession(makinaWard.id, MONDAY);
+    const attendance = await prisma.attendance.create({
+      data: {
+        employeeId,
+        sessionId: session.id,
+        wardId: makinaWard.id,
+        workDate: new Date(`${MONDAY}T00:00:00.000Z`),
+        checkedAt: new Date(`${MONDAY}T09:00:00.000Z`),
+        status: "ABSENT",
+        verificationMethod: "QR",
+        absenceReason: "SICK_OFF",
+        absenceReviewStatus: "PENDING",
+      },
+    });
+    const payload = { scopeType: "WARD", scopeId: makinaWard.id, startDate: MONDAY, endDate: MONDAY, kind: "DAILY" };
+
+    const blocked = await api(app, {
+      method: "POST",
+      url: "/api/v1/reports",
+      cookie: reviewer.cookie,
+      csrf: reviewer.csrf,
+      payload,
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().error.message).toContain("Ward Environment Officer approval");
+
+    await prisma.attendance.update({
+      where: { id: attendance.id },
+      data: { status: "SICK_OFF", absenceReviewStatus: "APPROVED", reviewedAt: new Date() },
+    });
+    const finalized = await api(app, {
+      method: "POST",
+      url: "/api/v1/reports",
+      cookie: reviewer.cookie,
+      csrf: reviewer.csrf,
+      payload,
+    });
+    expect(finalized.statusCode).toBe(201);
+  });
+
   // -- Deterministic snapshot --------------------------------------------------
 
   it("builds a deterministic daily snapshot with totals, roster and approved work", async () => {

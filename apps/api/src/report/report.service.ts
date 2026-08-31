@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -520,11 +521,46 @@ export class ReportService {
 
   // -- Finalize ---------------------------------------------------------------
 
+  private async assertAttendanceReadyForFinalization(
+    auth: AuthContext,
+    input: ReportFinalizeInput,
+  ): Promise<void> {
+    const { wardIds } = await this.resolveScope(auth, input.scopeType, input.scopeId);
+    const period = {
+      gte: fromDateString(input.startDate),
+      lte: fromDateString(input.endDate),
+    };
+    const [activeSessions, pendingReviews] = await this.prisma.client.$transaction([
+      this.prisma.client.attendanceSession.count({
+        where: { wardId: { in: wardIds }, workDate: period, closesAt: { gt: new Date() } },
+      }),
+      this.prisma.client.attendance.count({
+        where: {
+          wardId: { in: wardIds },
+          workDate: period,
+          absenceReviewStatus: "PENDING",
+        },
+      }),
+    ]);
+
+    if (activeSessions > 0) {
+      throw new ConflictException(
+        `Attendance is still open for ${activeSessions} ${activeSessions === 1 ? "session" : "sessions"}. Close or allow check-in to finish before finalizing this report.`,
+      );
+    }
+    if (pendingReviews > 0) {
+      throw new ConflictException(
+        `${pendingReviews} attendance ${pendingReviews === 1 ? "entry requires" : "entries require"} Ward Environment Officer approval before this report can be finalized.`,
+      );
+    }
+  }
+
   async finalize(
     auth: AuthContext,
     input: ReportFinalizeInput,
     meta: RequestMeta,
   ): Promise<Record<string, unknown>> {
+    await this.assertAttendanceReadyForFinalization(auth, input);
     const snapshot = await this.buildSnapshot(auth, input);
     const narrative =
       input.narrative?.trim() || deterministicNarrative(snapshot.totals, snapshot.workLogs);

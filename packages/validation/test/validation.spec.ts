@@ -50,6 +50,14 @@ describe("createWorkLogSchema", () => {
     expect(createWorkLogSchema.parse(base).numberOfTrips).toBe(0);
   });
 
+  it("accepts a UUID idempotency key and rejects malformed submission keys", () => {
+    expect(createWorkLogSchema.parse({
+      ...base,
+      clientSubmissionId: "58c9e6e8-2eff-46e7-8c67-9acd845665cb",
+    }).clientSubmissionId).toBe("58c9e6e8-2eff-46e7-8c67-9acd845665cb");
+    expect(() => createWorkLogSchema.parse({ ...base, clientSubmissionId: "repeat-click" })).toThrow();
+  });
+
   it("requires the officer's truth confirmation", () => {
     expect(() => createWorkLogSchema.parse({ ...base, truthConfirmed: false })).toThrow();
   });

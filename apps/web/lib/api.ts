@@ -764,6 +764,7 @@ export interface WorkLog {
 }
 
 export interface CreateWorkLogInput {
+  clientSubmissionId?: string;
   wardId: string;
   workDate: string;
   activity: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -8,10 +8,12 @@ import { DashNav } from "@/components/DashNav";
 import { StatusMessages } from "@/components/StatusMessages";
 import { ApiError, CompletionStatus, Evidence, EvidenceStage, Ward, WorkLog, WorkLogAction, apiErrorMessage, createWorkLog, downloadEvidence, fetchMe, listEvidence, listWards, listWorkLogs, uploadEvidence, workLogAction } from "@/lib/api";
 import { compressImage } from "@/lib/image";
+import { buildDailyReportHref } from "@/lib/report-navigation";
 import {
   EVIDENCE_MAX_PER_STAGE,
   addEvidenceFiles,
   createEvidenceFileSelection,
+  evidenceUploadKey,
 } from "@/lib/work-log-evidence";
 
 const STAGES: EvidenceStage[] = ["BEFORE", "DURING", "AFTER"];
@@ -20,6 +22,13 @@ const STAGE_GUIDANCE: Record<EvidenceStage, { title: string; description: string
   DURING: { title: "During work", description: "Capture the team and activity in progress." },
   AFTER: { title: "After work", description: "Show the completed work and final condition." },
 };
+
+interface SubmissionSuccess {
+  activity: string;
+  workDate: string;
+  photoCount: number;
+  reportHref: string;
+}
 
 function nairobiToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -41,15 +50,19 @@ function formatDate(value: string): string {
 export default function WorkLogsPage() {
   const router = useRouter();
   const [me, setMe] = useState<{ capabilities: string[] } | null>(null);
-  const [workLogs, setWorkLogs] = useState<WorkLog[]>([]);
   const [wards, setWards] = useState<Ward[]>([]);
-  const [evidenceByWorkLog, setEvidenceByWorkLog] = useState<Record<string, Evidence[]>>({});
+  const [reviewLogs, setReviewLogs] = useState<WorkLog[]>([]);
+  const [reviewEvidence, setReviewEvidence] = useState<Record<string, Evidence[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [submissionSuccess, setSubmissionSuccess] = useState<SubmissionSuccess | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const submissionLocked = useRef(false);
+  const submissionId = useRef<string | null>(null);
+  const uploadedPhotoKeys = useRef(new Set<string>());
   const [pendingAction, setPendingAction] = useState<{ workLog: WorkLog; action: WorkLogAction } | null>(null);
   const [form, setForm] = useState({
     wardId: "",
@@ -98,16 +111,16 @@ export default function WorkLogsPage() {
         ...currentForm,
         wardId: currentForm.wardId || accessible[0]?.id || "",
       }));
-      const logs = await listWorkLogs();
-      setWorkLogs(logs);
-      const evidenceResults = await Promise.allSettled(
-        logs.map(async (log) => [log.id, await listEvidence(log.id)] as const),
-      );
-      setEvidenceByWorkLog(
-        Object.fromEntries(
+      if (current.capabilities.includes("WORK_REVIEW")) {
+        const submitted = await listWorkLogs({ status: "SUBMITTED" });
+        setReviewLogs(submitted);
+        const evidenceResults = await Promise.allSettled(
+          submitted.map(async (workLog) => [workLog.id, await listEvidence(workLog.id)] as const),
+        );
+        setReviewEvidence(Object.fromEntries(
           evidenceResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []),
-        ),
-      );
+        ));
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         router.push("/login");
@@ -123,53 +136,10 @@ export default function WorkLogsPage() {
     void load();
   }, [load]);
 
-  async function loadEvidenceFor(workLogId: string) {
-    try {
-      const items = await listEvidence(workLogId);
-      setEvidenceByWorkLog((current) => ({ ...current, [workLogId]: items }));
-    } catch (err) {
-      setError(apiErrorMessage(err, "Unable to load evidence"));
-    }
-  }
-
-  async function onUploadEvidence(workLog: WorkLog, file: File | null, stage: EvidenceStage) {
-    if (!file) return;
-    setError(null);
-    setNotice(null);
-    setUploading(`${workLog.id}:${stage}`);
-    setUploadProgress(0);
-    try {
-      const prepared = await compressImage(file);
-      await uploadEvidence(
-        workLog.id,
-        prepared,
-        stage,
-        "",
-        setUploadProgress,
-      );
-      setUploading(null);
-      setUploadProgress(null);
-      setNotice(`${stage.toLowerCase()} photo uploaded.`);
-      await loadEvidenceFor(workLog.id);
-    } catch (err) {
-      setUploading(null);
-      setUploadProgress(null);
-      setError(apiErrorMessage(err, "Unable to upload photo"));
-    }
-  }
-
-  async function onOpenEvidence(evidence: Evidence) {
-    setError(null);
-    try {
-      const blob = await downloadEvidence(evidence.id);
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch (err) {
-      setError(apiErrorMessage(err, "Unable to open photo"));
-    }
-  }
-
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submissionLocked.current) return;
+    submissionLocked.current = true;
     setError(null);
     setNotice(null);
     const selectedPhotos = STAGES.flatMap((stage) =>
@@ -177,13 +147,16 @@ export default function WorkLogsPage() {
     );
     if (selectedPhotos.length === 0) {
       setError("Select at least one work photo from your gallery or camera.");
+      submissionLocked.current = false;
       return;
     }
     setSubmitting(true);
     let draft: WorkLog | null = null;
     try {
+      submissionId.current ??= crypto.randomUUID();
       draft = await createWorkLog({
         ...form,
+        clientSubmissionId: submissionId.current,
         description: form.activity,
         areasRoads: form.location,
         numberOfTrips: form.wasteTransferInvolved ? form.numberOfTrips : 0,
@@ -193,16 +166,25 @@ export default function WorkLogsPage() {
         climateTeamCount: form.cleanupDone ? form.climateTeamCount : 0,
       });
       for (const { stage, file } of selectedPhotos) {
+        const uploadKey = evidenceUploadKey(stage, file);
+        if (uploadedPhotoKeys.current.has(uploadKey)) continue;
         setUploading(`${draft.id}:${stage}`);
         setUploadProgress(0);
         const prepared = await compressImage(file);
         await uploadEvidence(draft.id, prepared, stage, "", setUploadProgress);
+        uploadedPhotoKeys.current.add(uploadKey);
       }
       const submitted = await workLogAction(draft.id, {
         action: "SUBMIT",
         expectedVersion: draft.version,
       });
-      setNotice(`Submitted ${submitted.activity} for ${formatDate(submitted.workDate)}.`);
+      setNotice(`Work log submitted successfully. All ${selectedPhotos.length} photos were uploaded.`);
+      setSubmissionSuccess({
+        activity: submitted.activity,
+        workDate: submitted.workDate,
+        photoCount: uploadedPhotoKeys.current.size,
+        reportHref: buildDailyReportHref(submitted.wardId, submitted.workDate),
+      });
       setForm((current) => ({
         ...current,
         activity: "",
@@ -224,17 +206,18 @@ export default function WorkLogsPage() {
       setEvidenceFiles(createEvidenceFileSelection());
       setTruckUsed(false);
       setBackhoeUsed(false);
-      setWorkLogs(await listWorkLogs());
+      submissionId.current = null;
+      uploadedPhotoKeys.current.clear();
     } catch (err) {
       if (draft) {
-        setNotice("The work log remains a draft. Resolve the photo error, then submit it below.");
-        setWorkLogs(await listWorkLogs().catch(() => workLogs));
+        setNotice("The work log remains a draft. Resolve the photo error, then retry this submission.");
       }
       setError(apiErrorMessage(err, "Unable to create work log"));
     } finally {
       setUploading(null);
       setUploadProgress(null);
       setSubmitting(false);
+      submissionLocked.current = false;
     }
   }
 
@@ -256,31 +239,33 @@ export default function WorkLogsPage() {
     }));
   }
 
-  async function onAction(workLog: WorkLog, action: WorkLogAction, reviewNote?: string) {
+  async function onOpenEvidence(evidence: Evidence) {
+    setError(null);
+    const viewer = window.open("about:blank", "_blank", "noopener,noreferrer");
+    try {
+      const blob = await downloadEvidence(evidence.id);
+      const objectUrl = URL.createObjectURL(blob);
+      if (viewer) viewer.location.href = objectUrl;
+      else window.location.href = objectUrl;
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (err) {
+      viewer?.close();
+      setError(apiErrorMessage(err, "Unable to open photo"));
+    }
+  }
+
+  async function onReviewAction(workLog: WorkLog, action: WorkLogAction, reviewNote?: string) {
     setError(null);
     setNotice(null);
     setPendingAction(null);
     try {
       await workLogAction(workLog.id, { action, expectedVersion: workLog.version, reviewNote });
-      const verb = action === "SUBMIT" ? "submitted" : action === "APPROVE" ? "approved" : "rejected";
-      setNotice(`${workLog.activity} ${verb}.`);
-      setWorkLogs(await listWorkLogs());
+      setReviewLogs((current) => current.filter((item) => item.id !== workLog.id));
+      setNotice(`${workLog.activity} ${action === "APPROVE" ? "approved" : "rejected"}.`);
     } catch (err) {
-      setError(apiErrorMessage(err, "Unable to update work log"));
+      setError(apiErrorMessage(err, "Unable to review work log"));
     }
   }
-
-  const actionsFor = (workLog: WorkLog) => {
-    const actions: Array<{ action: WorkLogAction; label: string; capability: string }> = [];
-    if (workLog.status === "DRAFT") {
-      actions.push({ action: "SUBMIT", label: "Submit", capability: "WORK_CREATE" });
-    }
-    if (workLog.status === "SUBMITTED") {
-      actions.push({ action: "APPROVE", label: "Approve", capability: "WORK_REVIEW" });
-      actions.push({ action: "REJECT", label: "Reject", capability: "WORK_REVIEW" });
-    }
-    return actions.filter((item) => can(item.capability));
-  };
 
   return (
     <main className="dashboard" aria-busy={loading}>
@@ -295,7 +280,37 @@ export default function WorkLogsPage() {
 
       <StatusMessages error={error} notice={notice} loading={loading ? "Loading work logs..." : null} />
 
-      {can("WORK_CREATE") && (
+      {submissionSuccess ? (
+        <section className="panel worklog-success-panel" role="status" aria-live="polite">
+          <div className="worklog-success-icon" aria-hidden="true">&#10003;</div>
+          <p className="eyebrow">SUBMISSION COMPLETE</p>
+          <h2>Work log submitted successfully</h2>
+          <p>
+            <strong>{submissionSuccess.activity}</strong> was submitted for {formatDate(submissionSuccess.workDate)}. All{" "}
+            {submissionSuccess.photoCount} selected {submissionSuccess.photoCount === 1 ? "photo was" : "photos were"} uploaded.
+          </p>
+          <p className="muted-text">
+            The daily report preview includes the day&apos;s staff attendance. This work entry will appear in
+            the final report after its authorized review and approval.
+          </p>
+          <div className="worklog-success-actions">
+            <button type="button" onClick={() => router.push(submissionSuccess.reportHref)}>
+              Generate daily report
+            </button>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => {
+                setSubmissionSuccess(null);
+                setNotice(null);
+                setError(null);
+              }}
+            >
+              Submit another work log
+            </button>
+          </div>
+        </section>
+      ) : can("WORK_CREATE") ? (
         <section className="panel">
           <h2>New work log</h2>
           <form className="grid-form worklog-form" onSubmit={onCreate}>
@@ -388,79 +403,33 @@ export default function WorkLogsPage() {
             </div>
           </form>
         </section>
-      )}
+      ) : null}
 
-      <section className="panel">
-        <h2>Work logs</h2>
-        {workLogs.length === 0 ? (!loading && (
-          <p className="empty">No work logs recorded.</p>
-        )) : (
-          <div className="table-wrap"><table className="data-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Activity</th>
-                <th>Location</th>
-                <th>Status</th>
-                <th>Completion</th>
-                <th>Evidence</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {workLogs.map((workLog) => (
+      {can("WORK_REVIEW") && (
+        <section className="panel">
+          <h2>Submitted work awaiting review</h2>
+          <p className="muted-text">Only submitted work within your assigned scope appears here.</p>
+          {reviewLogs.length === 0 ? (!loading && <p className="empty">No work logs are awaiting review.</p>) : (
+            <div className="table-wrap"><table className="data-table">
+              <thead><tr><th>Date</th><th>Activity</th><th>Location</th><th>Completion</th><th>Evidence</th><th></th></tr></thead>
+              <tbody>{reviewLogs.map((workLog) => (
                 <tr key={workLog.id}>
                   <td>{formatDate(workLog.workDate)}</td>
-                  <td>
-                    {workLog.activity}
-                    <span className="muted-text"> — {workLog.description}</span>
-                  </td>
+                  <td>{workLog.activity}</td>
                   <td>{workLog.location}</td>
-                  <td>
-                    <span className={`badge ${workLog.status.toLowerCase()}`}>
-                      {workLog.status}
-                    </span>
-                    {workLog.reviewNote && (
-                      <span className="muted-text"> — {workLog.reviewNote}</span>
-                    )}
-                  </td>
-                  <td>
-                    {workLog.detail.completionStatus === "INCOMPLETE"
-                      ? `Incomplete — ${workLog.detail.outstandingWork}`
-                      : "Complete"}
-                  </td>
-                  <td>
-                    {can("WORK_READ") && (
-                      <EvidenceCell
-                        evidence={evidenceByWorkLog[workLog.id] ?? []}
-                        canUpload={can("WORK_CREATE") && workLog.status === "DRAFT"}
-                        onOpen={onOpenEvidence}
-                        onUploaded={(file, stage) => void onUploadEvidence(workLog, file, stage)}
-                        uploadingStage={uploading?.startsWith(`${workLog.id}:`) ? uploading.split(":")[1] : null}
-                        uploadProgress={uploadProgress}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <div className="doc-actions">
-                      {actionsFor(workLog).map((item) => (
-                        <button
-                          key={item.action}
-                          className="link-btn"
-                          type="button"
-                          onClick={() => item.action === "SUBMIT" ? void onAction(workLog, item.action) : setPendingAction({ workLog, action: item.action })}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
+                  <td>{workLog.detail.completionStatus === "INCOMPLETE" ? `Incomplete — ${workLog.detail.outstandingWork}` : "Complete"}</td>
+                  <td><ReviewEvidence evidence={reviewEvidence[workLog.id] ?? []} onOpen={onOpenEvidence} /></td>
+                  <td><div className="doc-actions">
+                    <button type="button" className="link-btn" onClick={() => setPendingAction({ workLog, action: "APPROVE" })}>Approve</button>
+                    <button type="button" className="link-btn" onClick={() => setPendingAction({ workLog, action: "REJECT" })}>Reject</button>
+                  </div></td>
                 </tr>
-              ))}
-            </tbody>
-          </table></div>
-        )}
-      </section>
+              ))}</tbody>
+            </table></div>
+          )}
+        </section>
+      )}
+
       <ConfirmDialog
         open={Boolean(pendingAction)}
         title={`${pendingAction?.action === "APPROVE" ? "Approve" : "Reject"} work log?`}
@@ -468,61 +437,25 @@ export default function WorkLogsPage() {
         confirmLabel={pendingAction?.action === "APPROVE" ? "Approve" : "Reject"}
         requireText={pendingAction?.action === "REJECT"}
         onCancel={() => setPendingAction(null)}
-        onConfirm={(text) => pendingAction && void onAction(pendingAction.workLog, pendingAction.action, text || undefined)}
+        onConfirm={(text) => pendingAction && void onReviewAction(pendingAction.workLog, pendingAction.action, text || undefined)}
       />
     </main>
   );
 }
 
-function EvidenceCell({
-  evidence,
-  canUpload,
-  onOpen,
-  onUploaded,
-  uploadingStage,
-  uploadProgress,
-}: {
-  evidence: Evidence[];
-  canUpload: boolean;
-  onOpen: (evidence: Evidence) => void;
-  onUploaded: (file: File | null, stage: EvidenceStage) => void;
-  uploadingStage: string | null;
-  uploadProgress: number | null;
-}) {
+function ReviewEvidence({ evidence, onOpen }: { evidence: Evidence[]; onOpen: (item: Evidence) => void }) {
   return (
     <div className="doc-list">
       {STAGES.map((stage) => {
         const items = evidence.filter((item) => item.stage === stage);
-        return (
+        return items.length > 0 && (
           <span key={stage} className="doc-stage">
-            <strong>{stage.toLowerCase()}</strong> ({items.length}/{EVIDENCE_MAX_PER_STAGE})
-            {items.map((item) => (
-              <button
-                key={item.id}
-                className="link-btn"
-                type="button"
-                onClick={() => onOpen(item)}
-              >
-                view
+            <strong>{stage.toLowerCase()}</strong> ({items.length})
+            {items.map((item, index) => (
+              <button key={item.id} type="button" className="link-btn" onClick={() => onOpen(item)}>
+                view {index + 1}
               </button>
             ))}
-            {canUpload && items.length < EVIDENCE_MAX_PER_STAGE && (
-              <label className="link-btn">
-                {uploadingStage === stage
-                  ? uploadProgress !== null
-                    ? `uploading ${uploadProgress}%`
-                    : "preparing..."
-                  : "+ upload"}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png"
-                  className="visually-hidden"
-                  disabled={uploadingStage !== null}
-                  onChange={(e) => onUploaded(e.target.files?.[0] ?? null, stage)}
-                />
-              </label>
-            )}
-            {canUpload && items.length >= EVIDENCE_MAX_PER_STAGE && <span className="muted-text">limit reached</span>}
           </span>
         );
       })}

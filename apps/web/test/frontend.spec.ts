@@ -26,7 +26,9 @@ import {
   EVIDENCE_MAX_PER_STAGE,
   addEvidenceFiles,
   createEvidenceFileSelection,
+  evidenceUploadKey,
 } from "@/lib/work-log-evidence";
+import { buildDailyReportHref, readDailyReportPrefill } from "@/lib/report-navigation";
 
 describe("capability-aware navigation", () => {
   it("only exposes modules granted to the account", () => {
@@ -186,6 +188,36 @@ describe("work-log photo selection", () => {
       "before-4.jpg",
     ]);
     expect(result.rejectedCount).toBe(2);
+  });
+
+  it("uses stable stage-specific upload keys for safe retries", () => {
+    const selected = photo("site.jpg", 42);
+    expect(evidenceUploadKey("BEFORE", selected)).toBe(evidenceUploadKey("BEFORE", selected));
+    expect(evidenceUploadKey("BEFORE", selected)).not.toBe(evidenceUploadKey("AFTER", selected));
+  });
+});
+
+describe("work-log report handoff", () => {
+  it("builds and validates an attendance-inclusive daily report prefill", () => {
+    const href = buildDailyReportHref("ward-makina", "2026-08-31");
+    const url = new URL(href, "https://mazingira.example");
+
+    expect(url.pathname).toBe("/reports");
+    expect(readDailyReportPrefill(url.search)).toEqual({
+      scopeType: "WARD",
+      scopeId: "ward-makina",
+      startDate: "2026-08-31",
+      endDate: "2026-08-31",
+      kind: "DAILY",
+      preview: true,
+    });
+  });
+
+  it("ignores untrusted or malformed report prefill URLs", () => {
+    expect(readDailyReportPrefill("?source=work-log&scopeType=COUNTY&scopeId=county-1&kind=DAILY&startDate=2026-08-31&endDate=2026-08-31"))
+      .toBeNull();
+    expect(readDailyReportPrefill("?source=work-log&scopeType=WARD&scopeId=ward-1&kind=DAILY&startDate=not-a-date&endDate=2026-08-31"))
+      .toBeNull();
   });
 });
 

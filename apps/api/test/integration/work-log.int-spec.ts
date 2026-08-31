@@ -166,6 +166,23 @@ describe("work operations (integration)", () => {
     expect(workLog.truthConfirmed).toBe(true);
   });
 
+  it("reuses one draft when the same client submission is sent concurrently", async () => {
+    const clientSubmissionId = "58c9e6e8-2eff-46e7-8c67-9acd845665cb";
+    const payload = workLogPayload(makinaWard.id, { clientSubmissionId });
+
+    const [first, repeated] = await Promise.all([
+      createWorkLog(payload),
+      createWorkLog(payload),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(repeated.status).toBe(201);
+    expect((first.body as Record<string, unknown>).id).toBe(
+      (repeated.body as Record<string, unknown>).id,
+    );
+    expect(await prisma.workLog.count({ where: { clientSubmissionId } })).toBe(1);
+  });
+
   it("keeps a draft private until the submitting officer submits it", async () => {
     const { body } = await createWorkLog(workLogPayload(makinaWard.id));
     const id = (body as Record<string, any>).id;

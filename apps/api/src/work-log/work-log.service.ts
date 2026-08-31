@@ -119,51 +119,69 @@ export class WorkLogService {
     await this.wardAccessibleOrThrow(auth, input.wardId);
     const workDate = new Date(`${input.workDate}T00:00:00.000Z`);
 
-    const workLog = await this.prisma.client.workLog.create({
-      data: {
-        wardId: input.wardId,
-        workDate,
-        activity: input.activity,
-        location: input.location,
-        description: input.description,
-        staffCount: input.staffCount,
-        challenges: input.challenges?.trim() || null,
-        suggestedSolutions: input.suggestedSolutions?.trim() || null,
-        truthConfirmed: input.truthConfirmed,
-        status: "DRAFT",
-        submittedBy: auth.userId,
-        detail: {
-          create: {
-            completionStatus: input.completionStatus,
-            outstandingWork: input.outstandingWork.trim() || null,
-          },
-        },
-        operations: {
-          create: {
-            areasRoads: input.areasRoads,
-            numberOfTrips: input.numberOfTrips,
-            wasteTransferInvolved: input.wasteTransferInvolved,
-            truckId: input.truckId.trim() || null,
-            backhoeId: input.backhoeId.trim() || null,
-            cleanupDone: input.cleanupDone,
-            cleanupStakeholders: input.cleanupStakeholders.trim() || null,
-            climateTeamCount: input.climateTeamCount,
-          },
-        },
-      },
-      include: { detail: true, operations: true },
-    });
+    const workLog = await this.prisma.client.$transaction(async (tx) => {
+      if (input.clientSubmissionId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`work-log-submission:${input.clientSubmissionId}`}))`;
+        const existing = await tx.workLog.findUnique({
+          where: { clientSubmissionId: input.clientSubmissionId },
+          include: { detail: true, operations: true },
+        });
+        if (existing) {
+          if (existing.submittedBy !== auth.userId || existing.wardId !== input.wardId) {
+            throw new NotFoundException("Work log not found");
+          }
+          return existing;
+        }
+      }
 
-    await this.audit.record({
-      action: "WORK_LOG.DRAFT_CREATED",
-      targetType: "WorkLog",
-      targetId: workLog.id,
-      scopeType: "WARD",
-      scopeId: workLog.wardId,
-      actorUserId: auth.userId,
-      sourceIp: meta.sourceIp,
-      requestId: meta.requestId,
-      details: `${input.activity} ${input.completionStatus} truth-confirmed`,
+      const created = await tx.workLog.create({
+        data: {
+          wardId: input.wardId,
+          workDate,
+          activity: input.activity,
+          location: input.location,
+          description: input.description,
+          staffCount: input.staffCount,
+          challenges: input.challenges?.trim() || null,
+          suggestedSolutions: input.suggestedSolutions?.trim() || null,
+          truthConfirmed: input.truthConfirmed,
+          clientSubmissionId: input.clientSubmissionId ?? null,
+          status: "DRAFT",
+          submittedBy: auth.userId,
+          detail: {
+            create: {
+              completionStatus: input.completionStatus,
+              outstandingWork: input.outstandingWork.trim() || null,
+            },
+          },
+          operations: {
+            create: {
+              areasRoads: input.areasRoads,
+              numberOfTrips: input.numberOfTrips,
+              wasteTransferInvolved: input.wasteTransferInvolved,
+              truckId: input.truckId.trim() || null,
+              backhoeId: input.backhoeId.trim() || null,
+              cleanupDone: input.cleanupDone,
+              cleanupStakeholders: input.cleanupStakeholders.trim() || null,
+              climateTeamCount: input.climateTeamCount,
+            },
+          },
+        },
+        include: { detail: true, operations: true },
+      });
+
+      await this.audit.record({
+        action: "WORK_LOG.DRAFT_CREATED",
+        targetType: "WorkLog",
+        targetId: created.id,
+        scopeType: "WARD",
+        scopeId: created.wardId,
+        actorUserId: auth.userId,
+        sourceIp: meta.sourceIp,
+        requestId: meta.requestId,
+        details: `${input.activity} ${input.completionStatus} truth-confirmed`,
+      }, tx);
+      return created;
     });
     return this.toSummary(workLog);
   }

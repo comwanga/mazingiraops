@@ -18,6 +18,10 @@ import { visibleNavigation } from "@/lib/capabilities";
 import { formatUserIdentity } from "@/lib/identity";
 import { SYSTEM_ADMIN_CAPABILITIES } from "@ward-ops/contracts";
 import { createQrMatrix } from "@/lib/qr";
+import {
+  buildAttendanceSessionInput,
+  resolveAttendanceWardId,
+} from "@/lib/attendance-session";
 
 describe("capability-aware navigation", () => {
   it("only exposes modules granted to the account", () => {
@@ -112,6 +116,34 @@ describe("attendance API filters", () => {
       "/api/v1/attendance?wardId=ward+1&workDate=2026-08-20",
       expect.objectContaining({ credentials: "include" }),
     );
+  });
+});
+
+describe("attendance session setup", () => {
+  const wards = [
+    { id: "ward-makina", code: "MAKINA", name: "Makina", subcountyId: "kibra" },
+    { id: "ward-lindi", code: "LINDI", name: "Lindi", subcountyId: "kibra" },
+  ];
+
+  it("maps the session to an accessible ward assignment even when it is not first", () => {
+    expect(resolveAttendanceWardId(wards, [
+      { wardId: null },
+      { wardId: "ward-makina" },
+    ])).toBe("ward-makina");
+  });
+
+  it("does not retain a ward outside the signed-in account's accessible wards", () => {
+    expect(resolveAttendanceWardId(wards, [{ wardId: "ward-makina" }], "ward-elsewhere"))
+      .toBe("ward-makina");
+  });
+
+  it("builds backward-compatible activity and location metadata without extra form fields", () => {
+    expect(buildAttendanceSessionInput(wards[0], 120)).toEqual({
+      wardId: "ward-makina",
+      activity: "Cleaning",
+      location: "Makina Ward",
+      durationMinutes: 120,
+    });
   });
 });
 

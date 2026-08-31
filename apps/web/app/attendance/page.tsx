@@ -7,6 +7,10 @@ import { DashNav } from "@/components/DashNav";
 import { QrCode } from "@/components/QrCode";
 import { StatusMessages } from "@/components/StatusMessages";
 import {
+  buildAttendanceSessionInput,
+  resolveAttendanceWardId,
+} from "@/lib/attendance-session";
+import {
   ApiError,
   AttendanceRecord,
   AttendanceSession,
@@ -66,7 +70,7 @@ export default function AttendancePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ wardId: "", activity: "Cleaning", location: "", durationMinutes: 120 });
+  const [form, setForm] = useState({ wardId: "", durationMinutes: 120 });
   const [rosterDate, setRosterDate] = useState(nairobiToday());
   const [history, setHistory] = useState({ wardId: "", workDate: "" });
   const [manualForm, setManualForm] = useState({ status: "PRESENT", reason: "" });
@@ -99,11 +103,7 @@ export default function AttendancePage() {
       setWards(accessible);
       setForm((current) => ({
         ...current,
-        wardId:
-          current.wardId ||
-          accessible.find((ward) => ward.id === me.assignments[0]?.wardId)?.id ||
-          accessible[0]?.id ||
-          "",
+        wardId: resolveAttendanceWardId(accessible, me.assignments, current.wardId),
       }));
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 401) router.replace("/login");
@@ -121,9 +121,14 @@ export default function AttendancePage() {
     event.preventDefault();
     setError(null);
     setNotice(null);
+    const ward = wards.find((candidate) => candidate.id === form.wardId);
+    if (!ward) {
+      setError("Your account does not have an assigned ward for attendance.");
+      return;
+    }
     setSubmitting(true);
     try {
-      const session = await createSession(form);
+      const session = await createSession(buildAttendanceSessionInput(ward, form.durationMinutes));
       setNotice("Attendance session opened. Share the QR code with staff at the location.");
       setQrSession({
         ...session,
@@ -133,7 +138,6 @@ export default function AttendancePage() {
           name: "Selected ward",
         },
       });
-      setForm((current) => ({ ...current, location: "" }));
       setSessions(await listSessions());
     } catch (caught) {
       setError(apiErrorMessage(caught, "Unable to open session"));
@@ -253,11 +257,9 @@ export default function AttendancePage() {
         <section className="panel">
           <h2>Open an attendance session</h2>
           <form className="grid-form" onSubmit={onCreateSession}>
-            <label>Ward<select value={form.wardId} onChange={(event) => setForm({ ...form, wardId: event.target.value })} required><option value="">Select ward...</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select></label>
-            <label>Activity<select value={form.activity} onChange={(event) => setForm({ ...form, activity: event.target.value })}><option>Cleaning</option><option>Sweeping</option><option>Drainage</option><option>Garbage collection</option><option>Other</option></select></label>
-            <label>Location<input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} placeholder="e.g. Makina Ward Office" required /></label>
+            <label>Ward{wards.length <= 1 ? <input value={wards[0] ? `${wards[0].name} (${wards[0].code})` : "No ward assigned"} readOnly aria-readonly="true" /> : <select value={form.wardId} onChange={(event) => setForm({ ...form, wardId: event.target.value })} required><option value="">Select ward...</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select>}</label>
             <label>Duration (minutes)<select value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })}>{DURATIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes}</option>)}</select></label>
-            <button type="submit" disabled={submitting}>{submitting ? "Opening..." : "Open session"}</button>
+            <button type="submit" disabled={submitting || !form.wardId}>{submitting ? "Opening..." : "Open session"}</button>
           </form>
         </section>
       )}

@@ -26,6 +26,8 @@ function getGeolocation(): Promise<{ latitude: number; longitude: number } | nul
 export default function CheckInPage({ params }: { params: Promise<{ token: string }> }) {
   const [token, setToken] = useState<string>("");
   const [employeeNumber, setEmployeeNumber] = useState("");
+  const [declaringAbsent, setDeclaringAbsent] = useState(false);
+  const [absenceReason, setAbsenceReason] = useState<"SICK_OFF" | "WEEKEND_OFF_DUTY" | "">("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CheckInResponse | null>(null);
@@ -39,12 +41,14 @@ export default function CheckInPage({ params }: { params: Promise<{ token: strin
     setError(null);
     setSubmitting(true);
     try {
-      const geo = await getGeolocation();
+      const geo = declaringAbsent ? null : await getGeolocation();
       const response = await checkInPublic(
         token,
         employeeNumber,
         geo?.latitude ?? null,
         geo?.longitude ?? null,
+        declaringAbsent ? "ABSENT" : "PRESENT",
+        declaringAbsent ? absenceReason || undefined : undefined,
       );
       setResult(response);
     } catch (err) {
@@ -64,12 +68,17 @@ export default function CheckInPage({ params }: { params: Promise<{ token: strin
 
         {result ? (
           <div className="checkin-result">
-            <StatusMessages notice="Attendance confirmed." />
+            <StatusMessages notice={result.message ?? "Attendance confirmed."} />
             <p>
               <strong>{result.employee?.fullName ?? "Identity verified"}</strong>
             </p>
             <p>
-              Status: <span className={`badge ${result.status.toLowerCase()}`}>{result.status}</span>
+              Status:{" "}
+              <span className={`badge ${result.approvalStatus ? "submitted" : result.status.toLowerCase()}`}>
+                {result.approvalStatus
+                  ? `Pending approval · ${result.absenceReason === "SICK_OFF" ? "Sick off" : "Weekend off duty"}`
+                  : result.status}
+              </span>
             </p>
             <p className="subtitle">{new Date(result.checkedAt).toLocaleString()}</p>
           </div>
@@ -89,9 +98,28 @@ export default function CheckInPage({ params }: { params: Promise<{ token: strin
               }
               required
             />
+            <label className="checkin-absence-toggle">
+              <input
+                type="checkbox"
+                checked={declaringAbsent}
+                onChange={(event) => {
+                  setDeclaringAbsent(event.target.checked);
+                  if (!event.target.checked) setAbsenceReason("");
+                }}
+              />
+              <span>I am absent today</span>
+            </label>
+            {declaringAbsent && (
+              <fieldset className="checkin-absence-reason">
+                <legend>Reason for absence</legend>
+                <p>Your Ward Environment Officer must approve this declaration in the attendance register.</p>
+                <label><input type="radio" name="absenceReason" value="SICK_OFF" checked={absenceReason === "SICK_OFF"} onChange={() => setAbsenceReason("SICK_OFF")} required />Sick off</label>
+                <label><input type="radio" name="absenceReason" value="WEEKEND_OFF_DUTY" checked={absenceReason === "WEEKEND_OFF_DUTY"} onChange={() => setAbsenceReason("WEEKEND_OFF_DUTY")} required />Weekend off duty</label>
+              </fieldset>
+            )}
             <StatusMessages error={error} />
             <button type="submit" disabled={submitting}>
-              {submitting ? "Confirming..." : "Confirm attendance"}
+              {submitting ? "Submitting..." : declaringAbsent ? "Submit absence for approval" : "Confirm attendance"}
             </button>
           </form>
         )}

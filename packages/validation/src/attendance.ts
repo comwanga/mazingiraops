@@ -22,12 +22,40 @@ export const createAttendanceSessionSchema = z.object({
     }),
 });
 
-export const checkInSchema = z.object({
-  sessionToken: z.string().min(16),
-  employeeNumber: employeeNumberSchema,
-  latitude: z.number().min(-90).max(90).optional().nullable(),
-  longitude: z.number().min(-180).max(180).optional().nullable(),
+export const extendAttendanceSessionSchema = z.object({
+  extensionMinutes: z.number().int().refine((value) => [30, 60, 120].includes(value), {
+    message: "Extension must be 30, 60 or 120 minutes",
+  }),
 });
+
+export const checkInSchema = z
+  .object({
+    sessionToken: z.string().min(16),
+    employeeNumber: employeeNumberSchema,
+    attendanceIntent: z.enum(["PRESENT", "ABSENT"]).default("PRESENT"),
+    absenceReason: z.enum(["SICK_OFF", "WEEKEND_OFF_DUTY"]).optional(),
+    latitude: z.number().min(-90).max(90).optional().nullable(),
+    longitude: z.number().min(-180).max(180).optional().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.attendanceIntent === "ABSENT" && !value.absenceReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["absenceReason"], message: "Select an absence reason" });
+    }
+    if (value.attendanceIntent === "PRESENT" && value.absenceReason) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["absenceReason"], message: "Absence reason is only valid when absent" });
+    }
+  });
+
+export const reviewAttendanceAbsenceSchema = z
+  .object({
+    action: z.enum(["APPROVE", "REJECT"]),
+    expectedVersion: z.number().int().positive(),
+    reviewNote: z.string().trim().max(2000).default(""),
+  })
+  .refine((value) => value.action !== "REJECT" || value.reviewNote.length >= 5, {
+    path: ["reviewNote"],
+    message: "Explain why the absence declaration is rejected",
+  });
 
 export const manualAttendanceSchema = z.object({
   sessionId: idSchema,
@@ -59,7 +87,9 @@ export const rosterQuerySchema = z.object({
 });
 
 export type CreateAttendanceSessionInput = z.infer<typeof createAttendanceSessionSchema>;
+export type ExtendAttendanceSessionInput = z.infer<typeof extendAttendanceSessionSchema>;
 export type CheckInInput = z.infer<typeof checkInSchema>;
+export type ReviewAttendanceAbsenceInput = z.infer<typeof reviewAttendanceAbsenceSchema>;
 export type ManualAttendanceInput = z.infer<typeof manualAttendanceSchema>;
 export type CorrectAttendanceInput = z.infer<typeof correctAttendanceSchema>;
 export type AttendanceQueryInput = z.infer<typeof attendanceQuerySchema>;

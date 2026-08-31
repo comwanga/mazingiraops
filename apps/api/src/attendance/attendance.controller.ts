@@ -5,7 +5,9 @@ import {
   checkInSchema,
   correctAttendanceSchema,
   createAttendanceSessionSchema,
+  extendAttendanceSessionSchema,
   manualAttendanceSchema,
+  reviewAttendanceAbsenceSchema,
   rosterQuerySchema,
 } from "@ward-ops/validation";
 import { Public } from "../common/public.decorator";
@@ -72,6 +74,22 @@ export class AttendanceController {
     });
   }
 
+  @RequireCapability("ATTENDANCE_MANAGE")
+  @HttpCode(HttpStatus.OK)
+  @Post("sessions/:id/extend")
+  extendSession(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() auth: AuthContext | undefined,
+    @Req() request: FastifyRequest,
+  ) {
+    const input = extendAttendanceSessionSchema.parse(body);
+    return this.attendance.extendSession(auth!, id, input, {
+      sourceIp: request.ip,
+      requestId: request.headers["x-request-id"] as string | undefined,
+    });
+  }
+
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post("sessions/:token/check-in")
@@ -108,6 +126,22 @@ export class AttendanceController {
   ) {
     const input = correctAttendanceSchema.parse(body);
     return this.attendance.correct(auth!, id, input, {
+      sourceIp: request.ip,
+      requestId: request.headers["x-request-id"] as string | undefined,
+    });
+  }
+
+  @RequireCapability("ATTENDANCE_MANAGE")
+  @HttpCode(HttpStatus.OK)
+  @Post(":id/absence-review")
+  reviewAbsence(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() auth: AuthContext | undefined,
+    @Req() request: FastifyRequest,
+  ) {
+    const input = reviewAttendanceAbsenceSchema.parse(body);
+    return this.attendance.reviewAbsence(auth!, id, input, {
       sourceIp: request.ip,
       requestId: request.headers["x-request-id"] as string | undefined,
     });

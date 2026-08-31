@@ -74,6 +74,12 @@ export const ATTENDANCE_STATUSES = [
 ] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 
+export const ATTENDANCE_ABSENCE_REASONS = ["SICK_OFF", "WEEKEND_OFF_DUTY"] as const;
+export type AttendanceAbsenceReason = (typeof ATTENDANCE_ABSENCE_REASONS)[number];
+
+export const ATTENDANCE_REVIEW_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const;
+export type AttendanceReviewStatus = (typeof ATTENDANCE_REVIEW_STATUSES)[number];
+
 export const ABSENCE_KINDS = [
   "ANNUAL_LEAVE",
   "MATERNITY_LEAVE",

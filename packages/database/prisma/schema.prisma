@@ -75,6 +75,17 @@ enum VerificationMethod {
   MANUAL
 }
 
+enum AttendanceAbsenceReason {
+  SICK_OFF
+  WEEKEND_OFF_DUTY
+}
+
+enum AttendanceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum EmployeeAssignmentKind {
   PRIMARY
   TEMPORARY
@@ -405,6 +416,12 @@ model Attendance {
   checkedAt          DateTime
   status             AttendanceStatus
   verificationMethod VerificationMethod @default(QR)
+  absenceReason      AttendanceAbsenceReason?
+  absenceReviewStatus AttendanceReviewStatus?
+  reviewVersion      Int                @default(1)
+  reviewedBy         String?
+  reviewNote         String?
+  reviewedAt         DateTime?
   latitude           Decimal?         @db.Decimal(9, 6)
   longitude          Decimal?         @db.Decimal(9, 6)
   employee           Employee         @relation(fields: [employeeId], references: [id])
@@ -413,6 +430,7 @@ model Attendance {
 
   @@unique([employeeId, workDate])
   @@index([wardId, workDate])
+  @@index([wardId, workDate, absenceReviewStatus])
   @@index([workDate])
 }
 

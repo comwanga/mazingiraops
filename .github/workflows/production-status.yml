@@ -1,0 +1,113 @@
+name: Production Status
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  deployments: write
+  statuses: read
+
+concurrency:
+  group: production-status
+  cancel-in-progress: true
+
+jobs:
+  verify-production:
+    name: Verify Railway production
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Mazingiraops / production
+      url: https://mazingiraops.xyz
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Wait for Railway commit deployments
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api_state=pending
+          web_state=pending
+
+          for attempt in $(seq 1 40); do
+            statuses="$({
+              curl --fail --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer ${GH_TOKEN}" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/status"
+            } || true)"
+
+            if [ -n "${statuses}" ]; then
+              api_state="$(printf '%s' "${statuses}" | jq -r \
+                '[.statuses[] | select(.context == "Mazingiraops - api")][0].state // "pending"')"
+              web_state="$(printf '%s' "${statuses}" | jq -r \
+                '[.statuses[] | select(.context == "Mazingiraops - web")][0].state // "pending"')"
+            fi
+
+            echo "Railway status attempt ${attempt}: api=${api_state}, web=${web_state}"
+
+            if [ "${api_state}" = success ] && [ "${web_state}" = success ]; then
+              break
+            fi
+
+            if [ "${api_state}" = failure ] || [ "${api_state}" = error ] || \
+               [ "${web_state}" = failure ] || [ "${web_state}" = error ]; then
+              echo "Railway reported a failed production deployment for ${DEPLOY_SHA}." >&2
+              exit 1
+            fi
+
+            sleep 15
+          done
+
+          if [ "${api_state}" != success ] || [ "${web_state}" != success ]; then
+            echo "Timed out waiting for Railway production deployment ${DEPLOY_SHA}." >&2
+            exit 1
+          fi
+
+      - name: Verify production endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for attempt in $(seq 1 12); do
+            web_ok=false
+            api_ok=false
+
+            if curl --fail --silent --show-error --location --max-time 20 \
+              https://mazingiraops.xyz/login --output /dev/null; then
+              web_ok=true
+            fi
+
+            if curl --fail --silent --show-error --max-time 20 \
+              https://api-production-f6c3.up.railway.app/health/ready \
+              | jq -e '
+                  .status == "ready" and
+                  .checks.database == "up" and
+                  .checks.storage == "up" and
+                  .checks.redis == "up"
+                ' > /dev/null; then
+              api_ok=true
+            fi
+
+            echo "Production probe attempt ${attempt}: api=${api_ok}, web=${web_ok}"
+
+            if [ "${api_ok}" = true ] && [ "${web_ok}" = true ]; then
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Production endpoints did not become healthy in time." >&2
+          exit 1

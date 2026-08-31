@@ -17,7 +17,9 @@ import type {
   CheckInInput,
   CorrectAttendanceInput,
   CreateAttendanceSessionInput,
+  ExtendAttendanceSessionInput,
   ManualAttendanceInput,
+  ReviewAttendanceAbsenceInput,
   RosterQueryInput,
 } from "@ward-ops/validation";
 
@@ -263,6 +265,43 @@ export class AttendanceService {
     return { id: updated.id, wardId: updated.wardId, closesAt: updated.closesAt, active: false };
   }
 
+  async extendSession(
+    auth: AuthContext,
+    id: string,
+    input: ExtendAttendanceSessionInput,
+    meta: RequestMeta,
+  ): Promise<Record<string, unknown>> {
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`attendance-session:${id}`}))`;
+      const session = await tx.attendanceSession.findUnique({ where: { id } });
+      if (!session) throw new NotFoundException("Attendance session not found");
+      await this.sessionVisible(auth, session);
+      if (session.closesAt <= new Date()) {
+        throw new ConflictException("Only an active attendance session can be extended");
+      }
+      const closesAt = new Date(session.closesAt.getTime() + input.extensionMinutes * 60 * 1000);
+      const result = await tx.attendanceSession.updateMany({
+        where: { id, closesAt: session.closesAt },
+        data: { closesAt },
+      });
+      if (result.count === 0) throw new ConflictException("Attendance session changed; refresh and try again");
+      return { session, closesAt };
+    });
+
+    await this.audit.record({
+      action: "ATTENDANCE.SESSION_EXTENDED",
+      targetType: "AttendanceSession",
+      targetId: id,
+      scopeType: "WARD",
+      scopeId: updated.session.wardId,
+      actorUserId: auth.userId,
+      sourceIp: meta.sourceIp,
+      requestId: meta.requestId,
+      details: `${input.extensionMinutes} minutes; closes ${updated.closesAt.toISOString()}`,
+    });
+    return { id, wardId: updated.session.wardId, closesAt: updated.closesAt, active: true };
+  }
+
   // -- QR check-in ------------------------------------------------------------
 
   async checkIn(input: CheckInInput, meta: RequestMeta): Promise<Record<string, unknown>> {
@@ -295,10 +334,53 @@ export class AttendanceService {
       throw new BadRequestException("Payroll number was not found for this attendance session.");
     }
 
-    const status: AttendanceStatus =
-      now.getTime() > session.opensAt.getTime() + LATE_THRESHOLD_MINUTES * 60 * 1000
-        ? "LATE"
-        : "PRESENT";
+    const isAbsenceDeclaration = input.attendanceIntent === "ABSENT";
+    const status: AttendanceStatus = isAbsenceDeclaration
+      ? "ABSENT"
+      : now.getTime() > session.opensAt.getTime() + LATE_THRESHOLD_MINUTES * 60 * 1000
+          ? "LATE"
+          : "PRESENT";
+
+    if (!isAbsenceDeclaration) {
+      const pendingAbsence = await this.prisma.client.attendance.findUnique({
+        where: { employeeId_workDate: { employeeId: employee.id, workDate: session.workDate } },
+      });
+      if (pendingAbsence?.absenceReviewStatus === "PENDING" && pendingAbsence.absenceReason) {
+        const replaced = await this.prisma.client.attendance.updateMany({
+          where: { id: pendingAbsence.id, status: "ABSENT", absenceReviewStatus: "PENDING" },
+          data: {
+            status,
+            checkedAt: now,
+            absenceReviewStatus: "REJECTED",
+            reviewVersion: { increment: 1 },
+            reviewNote: "Superseded by employee QR attendance",
+            reviewedAt: now,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
+          },
+        });
+        if (replaced.count === 1) {
+          this.throttle.recordSuccess(key);
+          await this.audit.record({
+            action: "ATTENDANCE.ABSENCE_SUPERSEDED",
+            targetType: "Attendance",
+            targetId: pendingAbsence.id,
+            scopeType: "WARD",
+            scopeId: session.wardId,
+            sourceIp: meta.sourceIp,
+            requestId: meta.requestId,
+            details: `${pendingAbsence.absenceReason} -> ${status}`,
+          });
+          return {
+            ok: true,
+            status,
+            message: "Attendance confirmed. The pending absence declaration was withdrawn.",
+            checkedAt: now,
+            employee: { id: employee.id, fullName: employee.fullName },
+          };
+        }
+      }
+    }
 
     try {
       const record = await this.prisma.client.attendance.create({
@@ -310,24 +392,29 @@ export class AttendanceService {
           checkedAt: now,
           status,
           verificationMethod: "QR",
+          absenceReason: isAbsenceDeclaration ? input.absenceReason : null,
+          absenceReviewStatus: isAbsenceDeclaration ? "PENDING" : null,
           latitude: input.latitude ?? null,
           longitude: input.longitude ?? null,
         },
       });
       this.throttle.recordSuccess(key);
       await this.audit.record({
-        action: "ATTENDANCE.CHECKED_IN",
+        action: isAbsenceDeclaration ? "ATTENDANCE.ABSENCE_DECLARED" : "ATTENDANCE.CHECKED_IN",
         targetType: "Employee",
         targetId: employee.id,
         scopeType: "WARD",
         scopeId: session.wardId,
         sourceIp: meta.sourceIp,
         requestId: meta.requestId,
-        details: `Status ${status}`,
+        details: isAbsenceDeclaration ? `Pending ${input.absenceReason}` : `Status ${status}`,
       });
       return {
         ok: true,
         status,
+        absenceReason: isAbsenceDeclaration ? input.absenceReason : undefined,
+        approvalStatus: isAbsenceDeclaration ? "PENDING" : undefined,
+        message: isAbsenceDeclaration ? "Absence declaration submitted for supervisor approval." : undefined,
         checkedAt: record.checkedAt,
         employee: { id: employee.id, fullName: employee.fullName },
       };
@@ -426,10 +513,21 @@ export class AttendanceService {
       throw new NotFoundException("Attendance record not found in the selected session");
     }
     await this.sessionVisible(auth, existing.session);
+    if (existing.absenceReviewStatus === "PENDING") {
+      throw new ConflictException("Review the pending absence declaration before correcting attendance");
+    }
     if (existing.status === input.status) throw new ConflictException("Attendance already has that status");
     const updated = await this.prisma.client.attendance.update({
       where: { id: attendanceId },
-      data: { status: input.status, verificationMethod: "MANUAL" },
+      data: {
+        status: input.status,
+        verificationMethod: "MANUAL",
+        absenceReason: null,
+        absenceReviewStatus: null,
+        reviewedBy: null,
+        reviewNote: null,
+        reviewedAt: null,
+      },
     });
     await this.audit.record({
       action: "ATTENDANCE.CORRECTED",
@@ -443,6 +541,69 @@ export class AttendanceService {
       details: `${existing.status} -> ${input.status}: ${input.reason}; session=${input.sessionId}`,
     });
     return { id: updated.id, sessionId: updated.sessionId, status: updated.status, checkedAt: updated.checkedAt };
+  }
+
+  async reviewAbsence(
+    auth: AuthContext,
+    attendanceId: string,
+    input: ReviewAttendanceAbsenceInput,
+    meta: RequestMeta,
+  ): Promise<Record<string, unknown>> {
+    const existing = await this.prisma.client.attendance.findUnique({
+      where: { id: attendanceId },
+      include: { session: true },
+    });
+    if (!existing) throw new NotFoundException("Attendance record not found");
+    await this.sessionVisible(auth, existing.session);
+    if (!existing.absenceReason || existing.absenceReviewStatus !== "PENDING") {
+      throw new ConflictException("This attendance record has no pending absence declaration");
+    }
+    if (existing.reviewVersion !== input.expectedVersion) {
+      throw new ConflictException("This absence declaration changed; refresh and try again");
+    }
+
+    const approvedStatus: AttendanceStatus = existing.absenceReason === "SICK_OFF" ? "SICK_OFF" : "OFF_DUTY";
+    const nextStatus: AttendanceStatus = input.action === "APPROVE" ? approvedStatus : "ABSENT";
+    const reviewStatus = input.action === "APPROVE" ? "APPROVED" : "REJECTED";
+    const result = await this.prisma.client.attendance.updateMany({
+      where: {
+        id: attendanceId,
+        status: "ABSENT",
+        absenceReviewStatus: "PENDING",
+        reviewVersion: input.expectedVersion,
+      },
+      data: {
+        status: nextStatus,
+        absenceReviewStatus: reviewStatus,
+        reviewVersion: { increment: 1 },
+        reviewedBy: auth.userId,
+        reviewNote: input.reviewNote || null,
+        reviewedAt: new Date(),
+      },
+    });
+    if (result.count === 0) {
+      throw new ConflictException("This absence declaration changed; refresh and try again");
+    }
+
+    await this.audit.record({
+      action: `ATTENDANCE.ABSENCE_${reviewStatus}`,
+      targetType: "Attendance",
+      targetId: attendanceId,
+      scopeType: "WARD",
+      scopeId: existing.wardId,
+      actorUserId: auth.userId,
+      sourceIp: meta.sourceIp,
+      requestId: meta.requestId,
+      details: `${existing.absenceReason} -> ${nextStatus}`,
+    });
+    return {
+      id: attendanceId,
+      sessionId: existing.sessionId,
+      status: nextStatus,
+      absenceReason: existing.absenceReason,
+      absenceReviewStatus: reviewStatus,
+      reviewVersion: input.expectedVersion + 1,
+    };
   }
 
   // -- Reads ------------------------------------------------------------------
@@ -483,6 +644,10 @@ export class AttendanceService {
       checkedAt: record.checkedAt,
       status: record.status,
       verificationMethod: record.verificationMethod,
+      absenceReason: record.absenceReason,
+      absenceReviewStatus: record.absenceReviewStatus,
+      reviewVersion: record.reviewVersion,
+      reviewNote: record.reviewNote,
     }));
   }
 
@@ -563,7 +728,11 @@ export class AttendanceService {
         detail = `Approved ${absence.kind.replace(/_/g, " ").toLowerCase()} · returns ${formatReturnDate(absence.returnDate)}`;
       } else if (record) {
         status = record.status;
-        detail = "Manual status";
+        detail = record.absenceReason
+          ? record.absenceReviewStatus === "PENDING"
+            ? `Awaiting approval: ${formatAbsenceReason(record.absenceReason)}`
+            : `${formatAbsenceReason(record.absenceReason)} ${record.absenceReviewStatus?.toLowerCase()}`
+          : "Manual status";
       } else if (employee.profile?.rosterStatus === "ANNUAL_LEAVE") {
         status = "LEAVE";
         detail = "Annual leave (staff roster)";
@@ -584,9 +753,17 @@ export class AttendanceService {
         attendanceId: record?.id ?? null,
         sessionId: record?.sessionId ?? deployment?.id ?? null,
         correctionAllowed: Boolean(record),
+        absenceReason: record?.absenceReason ?? null,
+        absenceReviewStatus: record?.absenceReviewStatus ?? null,
+        reviewVersion: record?.reviewVersion ?? null,
+        approvalAllowed: record?.absenceReviewStatus === "PENDING",
       };
     });
   }
+}
+
+function formatAbsenceReason(value: "SICK_OFF" | "WEEKEND_OFF_DUTY"): string {
+  return value === "SICK_OFF" ? "Sick off" : "Weekend off duty";
 }
 
 function formatReturnDate(value: Date): string {

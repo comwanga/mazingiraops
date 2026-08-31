@@ -528,6 +528,10 @@ export interface AttendanceRecord {
   checkedAt: string;
   status: string;
   verificationMethod: string;
+  absenceReason: "SICK_OFF" | "WEEKEND_OFF_DUTY" | null;
+  absenceReviewStatus: "PENDING" | "APPROVED" | "REJECTED" | null;
+  reviewVersion: number;
+  reviewNote: string | null;
 }
 
 export interface RosterRow {
@@ -538,6 +542,10 @@ export interface RosterRow {
   attendanceId: string | null;
   sessionId: string | null;
   correctionAllowed: boolean;
+  absenceReason: "SICK_OFF" | "WEEKEND_OFF_DUTY" | null;
+  absenceReviewStatus: "PENDING" | "APPROVED" | "REJECTED" | null;
+  reviewVersion: number | null;
+  approvalAllowed: boolean;
 }
 
 export interface CreateSessionInput {
@@ -575,6 +583,16 @@ export async function closeAttendanceSession(id: string, revoke = false): Promis
   });
 }
 
+export async function extendAttendanceSession(
+  id: string,
+  extensionMinutes = 30,
+): Promise<{ id: string; wardId: string; closesAt: string; active: true }> {
+  return apiFetch(`/attendance/sessions/${encodeURIComponent(id)}/extend`, {
+    method: "POST",
+    body: { extensionMinutes },
+  });
+}
+
 export async function listAttendance(query?: AttendanceQuery): Promise<AttendanceRecord[]> {
   return apiFetch<AttendanceRecord[]>(`/attendance${attendanceQuery(query)}`);
 }
@@ -607,10 +625,22 @@ export async function correctAttendance(
   });
 }
 
+export async function reviewAttendanceAbsence(
+  id: string,
+  input: { action: "APPROVE" | "REJECT"; expectedVersion: number; reviewNote?: string },
+): Promise<unknown> {
+  return apiFetch(`/attendance/${encodeURIComponent(id)}/absence-review`, {
+    method: "POST",
+    body: input,
+  });
+}
+
 export interface CheckInResponse {
   ok: boolean;
   message?: string;
   status: string;
+  absenceReason?: "SICK_OFF" | "WEEKEND_OFF_DUTY";
+  approvalStatus?: "PENDING";
   employee?: { id: string; fullName: string };
   checkedAt: string;
 }
@@ -620,10 +650,12 @@ export async function checkInPublic(
   employeeNumber: string,
   latitude?: number | null,
   longitude?: number | null,
+  attendanceIntent: "PRESENT" | "ABSENT" = "PRESENT",
+  absenceReason?: "SICK_OFF" | "WEEKEND_OFF_DUTY",
 ): Promise<CheckInResponse> {
   return apiFetch<CheckInResponse>(`/attendance/sessions/${encodeURIComponent(sessionToken)}/check-in`, {
     method: "POST",
-    body: { employeeNumber, latitude, longitude },
+    body: { employeeNumber, latitude, longitude, attendanceIntent, absenceReason },
   });
 }
 

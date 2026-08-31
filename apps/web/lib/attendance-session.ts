@@ -22,7 +22,7 @@ export function resolveAttendanceWardId(
 export function buildAttendanceSessionInput(ward: Pick<Ward, "id" | "name">, durationMinutes: number) {
   return {
     wardId: ward.id,
-    activity: "Cleaning",
+    activity: "Ward attendance",
     location: `${ward.name} Ward`,
     durationMinutes,
   };

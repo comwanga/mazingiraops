@@ -3,13 +3,16 @@ import jsQR from "jsqr";
 import {
   apiErrorMessage,
   ApiError,
+  checkInPublic,
   downloadReportEvidence,
+  extendAttendanceSession,
   listStaff,
   listAttendance,
   listPublicOrganisations,
   listUsers,
   login,
   requestAccess,
+  reviewAttendanceAbsence,
   resetUserPassword,
   setUserActive,
   updateUserAssignments,
@@ -147,7 +150,7 @@ describe("attendance session setup", () => {
   it("builds backward-compatible activity and location metadata without extra form fields", () => {
     expect(buildAttendanceSessionInput(wards[0], 120)).toEqual({
       wardId: "ward-makina",
-      activity: "Cleaning",
+      activity: "Ward attendance",
       location: "Makina Ward",
       durationMinutes: 120,
     });
@@ -317,5 +320,21 @@ describe("new backend client routes", () => {
       code: "INVALID_EVIDENCE_PATH",
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends employee absence declarations and supervisor attendance actions", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: async () => '{"ok":true}' });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await checkInPublic("session-token-123456", "20230464669", null, null, "ABSENT", "SICK_OFF");
+    await extendAttendanceSession("session/1", 30);
+    await reviewAttendanceAbsence("attendance/1", { action: "APPROVE", expectedVersion: 1 });
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "/api/v1/attendance/sessions/session-token-123456/check-in",
+      "/api/v1/attendance/sessions/session%2F1/extend",
+      "/api/v1/attendance/attendance%2F1/absence-review",
+    ]);
+    expect(fetchMock.mock.calls[0][1].body).toContain('"absenceReason":"SICK_OFF"');
   });
 });

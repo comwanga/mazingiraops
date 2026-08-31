@@ -6,7 +6,9 @@ import { createEmployeeSchema, createEmployeeAssignmentSchema } from "../src/sta
 import {
   createAttendanceSessionSchema,
   checkInSchema,
+  extendAttendanceSessionSchema,
   manualAttendanceSchema,
+  reviewAttendanceAbsenceSchema,
   rosterQuerySchema,
 } from "../src/attendance";
 
@@ -179,6 +181,13 @@ describe("createAttendanceSessionSchema", () => {
   });
 });
 
+describe("extendAttendanceSessionSchema", () => {
+  it("accepts bounded extensions and rejects arbitrary durations", () => {
+    expect(extendAttendanceSessionSchema.parse({ extensionMinutes: 30 }).extensionMinutes).toBe(30);
+    expect(() => extendAttendanceSessionSchema.parse({ extensionMinutes: 480 })).toThrow();
+  });
+});
+
 describe("checkInSchema", () => {
   it("accepts a valid check-in", () => {
     const parsed = checkInSchema.parse({
@@ -207,6 +216,26 @@ describe("checkInSchema", () => {
         latitude: 200,
       }),
     ).toThrow();
+  });
+
+  it("requires a reason for an employee absence declaration", () => {
+    const base = {
+      sessionToken: "0123456789abcdef0123456789abcdef",
+      employeeNumber: "20230464669",
+      attendanceIntent: "ABSENT",
+    };
+    expect(() => checkInSchema.parse(base)).toThrow();
+    expect(checkInSchema.parse({ ...base, absenceReason: "WEEKEND_OFF_DUTY" }).absenceReason)
+      .toBe("WEEKEND_OFF_DUTY");
+  });
+});
+
+describe("reviewAttendanceAbsenceSchema", () => {
+  it("requires a rejection explanation but permits approval without one", () => {
+    expect(reviewAttendanceAbsenceSchema.parse({ action: "APPROVE", expectedVersion: 1 }).action)
+      .toBe("APPROVE");
+    expect(() => reviewAttendanceAbsenceSchema.parse({ action: "REJECT", expectedVersion: 1 }))
+      .toThrow();
   });
 });
 

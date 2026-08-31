@@ -279,6 +279,61 @@ html[data-theme="dark"] .brand-background {
   min-height: 70px;
 }
 
+.auth-form .checkin-absence-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.auth-form .checkin-absence-toggle input,
+.auth-form .checkin-absence-reason input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+
+.checkin-absence-reason {
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 4px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 38%, var(--line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--green) 7%, var(--surface));
+}
+
+.checkin-absence-reason legend {
+  padding-inline: 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.checkin-absence-reason p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-form .checkin-absence-reason label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: var(--ink);
+  cursor: pointer;
+}
+
 .password-input-group {
   display: flex;
   flex-direction: column;

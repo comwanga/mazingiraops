@@ -106,6 +106,33 @@ describe("attendance (integration)", () => {
     expect(session.closesAt).toBeDefined();
   });
 
+  it("extends only an active attendance session", async () => {
+    const session = await createSession();
+    const originalClose = Date.parse(session.closesAt);
+    const extended = await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/sessions/${session.id}/extend`,
+      cookie: officer.cookie,
+      csrf: officer.csrf,
+      payload: { extensionMinutes: 30 },
+    });
+    expect(extended.statusCode).toBe(200);
+    expect(Date.parse(extended.json().closesAt) - originalClose).toBe(30 * 60 * 1000);
+
+    await prisma.attendanceSession.update({
+      where: { id: session.id },
+      data: { closesAt: new Date(Date.now() - 1000) },
+    });
+    const expired = await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/sessions/${session.id}/extend`,
+      cookie: officer.cookie,
+      csrf: officer.csrf,
+      payload: { extensionMinutes: 30 },
+    });
+    expect(expired.statusCode).toBe(409);
+  });
+
   it("rejects a second active session for the same ward and date", async () => {
     await createSession();
     const second = await api(app, {
@@ -157,6 +184,77 @@ describe("attendance (integration)", () => {
     });
     expect(record).not.toBeNull();
     expect(record!.verificationMethod).toBe("QR");
+  });
+
+  it("holds an employee-declared absence for ward-officer approval", async () => {
+    const session = await createSession();
+    const declared = await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/sessions/${session.token}/check-in`,
+      payload: {
+        employeeNumber,
+        attendanceIntent: "ABSENT",
+        absenceReason: "SICK_OFF",
+      },
+    });
+    expect(declared.statusCode).toBe(200);
+    expect(declared.json()).toMatchObject({
+      status: "ABSENT",
+      absenceReason: "SICK_OFF",
+      approvalStatus: "PENDING",
+    });
+
+    const pending = await prisma.attendance.findFirstOrThrow({ where: { employeeId } });
+    expect(pending.status).toBe("ABSENT");
+    expect(pending.absenceReviewStatus).toBe("PENDING");
+
+    const roster = await api(app, {
+      method: "GET",
+      url: `/api/v1/attendance/roster?wardId=${makinaWard.id}`,
+      cookie: officer.cookie,
+    });
+    expect(roster.statusCode).toBe(200);
+    expect(roster.json()[0]).toMatchObject({
+      status: "ABSENT",
+      absenceReason: "SICK_OFF",
+      absenceReviewStatus: "PENDING",
+      approvalAllowed: true,
+    });
+
+    const approved = await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/${pending.id}/absence-review`,
+      cookie: officer.cookie,
+      csrf: officer.csrf,
+      payload: { action: "APPROVE", expectedVersion: 1 },
+    });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({ status: "SICK_OFF", absenceReviewStatus: "APPROVED" });
+    expect((await prisma.attendance.findUniqueOrThrow({ where: { id: pending.id } })).status).toBe("SICK_OFF");
+  });
+
+  it("lets a real QR check-in supersede a pending absence declaration", async () => {
+    const session = await createSession();
+    await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/sessions/${session.token}/check-in`,
+      payload: {
+        employeeNumber,
+        attendanceIntent: "ABSENT",
+        absenceReason: "WEEKEND_OFF_DUTY",
+      },
+    });
+
+    const checkedIn = await api(app, {
+      method: "POST",
+      url: `/api/v1/attendance/sessions/${session.token}/check-in`,
+      payload: { employeeNumber },
+    });
+    expect(checkedIn.statusCode).toBe(200);
+    expect(checkedIn.json().status).toBe("PRESENT");
+    expect(await prisma.attendance.findFirst({
+      where: { employeeId, status: "PRESENT", absenceReviewStatus: "REJECTED" },
+    })).not.toBeNull();
   });
 
   it("rejects an unknown payroll number and closes a session immediately", async () => {

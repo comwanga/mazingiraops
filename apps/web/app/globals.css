@@ -1214,7 +1214,8 @@ button:disabled,
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f8faf6;
+  background: var(--surface-muted);
+  color: var(--ink);
 }
 
 .manual-form h3,

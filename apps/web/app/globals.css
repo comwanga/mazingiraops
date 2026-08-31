@@ -935,6 +935,330 @@ html[data-theme="dark"] .brand-background {
   margin: 0;
 }
 
+.worklog-form {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.worklog-section {
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.worklog-section > legend {
+  max-width: calc(100% - 24px);
+  padding: 0 10px;
+}
+
+.worklog-section > legend > span:last-child {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  vertical-align: middle;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.worklog-section > legend small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.worklog-step {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  margin-right: 9px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--paper);
+  font-size: 13px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
+.worklog-fields {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.worklog-fields > .worklog-field {
+  grid-column: span 4;
+}
+
+.worklog-fields > .worklog-field-wide {
+  grid-column: span 6;
+}
+
+.worklog-fields > .worklog-field-grow {
+  grid-column: span 8;
+}
+
+.worklog-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.grid-form .worklog-choice,
+.grid-form .worklog-confirm {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  flex-direction: initial;
+  align-items: start;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.grid-form .worklog-choice {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+  cursor: pointer;
+}
+
+.worklog-choice span,
+.worklog-choice small {
+  display: block;
+}
+
+.worklog-choice strong {
+  font-size: 14px;
+}
+
+.worklog-choice small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.worklog-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+
+.worklog-form .conditional-fields {
+  margin-top: 16px;
+  background: var(--surface-strong);
+}
+
+.worklog-form .conditional-fields .inline-label {
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+  min-height: 44px;
+  margin: 0;
+}
+
+.worklog-completion {
+  margin-top: 16px;
+}
+
+.worklog-section-intro {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.worklog-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.evidence-stage-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-strong);
+}
+
+.evidence-stage-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evidence-stage-heading strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.evidence-stage-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.evidence-stage-heading > span {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.grid-form .evidence-picker {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.grid-form .evidence-picker.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.worklog-form input[type="file"].visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.evidence-empty {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.evidence-file-list {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence-file-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.evidence-file-list li > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worklog-form .evidence-file-remove {
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.upload-progress {
+  margin: 14px 0 0;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.worklog-submit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+}
+
+.grid-form .worklog-confirm {
+  max-width: 620px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.worklog-submit-bar > button {
+  min-width: 190px;
+}
+
+@media (max-width: 900px) {
+  .worklog-fields > .worklog-field,
+  .worklog-fields > .worklog-field-wide,
+  .worklog-fields > .worklog-field-grow {
+    grid-column: span 6;
+  }
+
+  .worklog-evidence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .worklog-section {
+    padding: 16px 12px;
+  }
+
+  .worklog-fields > .worklog-field,
+  .worklog-fields > .worklog-field-wide,
+  .worklog-fields > .worklog-field-grow,
+  .worklog-choice-grid {
+    grid-column: 1 / -1;
+  }
+
+  .worklog-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worklog-submit-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .worklog-submit-bar > button {
+    width: 100%;
+  }
+}
+
 .data-table {
   width: 100%;
   border-collapse: collapse;

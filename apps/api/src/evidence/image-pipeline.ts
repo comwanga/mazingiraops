@@ -1,5 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import sharp from "sharp";
+export { EVIDENCE_MAX_PER_STAGE } from "@ward-ops/contracts";
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -11,8 +12,6 @@ export interface ProcessedImage {
 export const EVIDENCE_MAX_DIMENSION = 1920;
 export const EVIDENCE_JPEG_QUALITY = 80;
 export const EVIDENCE_MAX_BYTES = 5 * 1024 * 1024;
-export const EVIDENCE_MAX_PER_STAGE = 4;
-
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const HEIC_MAGIC = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);

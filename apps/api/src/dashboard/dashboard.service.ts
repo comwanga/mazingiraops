@@ -1,15 +1,52 @@
-import { Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import { Inject, Injectable } from "@nestjs/common";
 import type { CapabilityCode } from "@ward-ops/contracts";
 import { AuthContext } from "../auth/auth-context";
 import { ScopeService } from "../authorization/scope.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { todayNairobi } from "../attendance/attendance.service";
+import { APP_CONFIG } from "../config/config.module";
+import type { AppConfig } from "../config/config";
+import { CacheService } from "../redis/cache.service";
+
+const DASHBOARD_CACHE_PREFIX = "dashboard:v1:";
+
+export interface DashboardResult {
+  asOf: string;
+  workDate: string;
+  metrics: Record<string, number>;
+  queue: Array<{ type: string; id: string; label: string; detail: string; href: string }>;
+}
+
+function isDashboardResult(value: unknown): value is DashboardResult {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DashboardResult>;
+  return (
+    typeof candidate.asOf === "string" &&
+    typeof candidate.workDate === "string" &&
+    Boolean(candidate.metrics) &&
+    typeof candidate.metrics === "object" &&
+    Object.values(candidate.metrics).every((metric) => typeof metric === "number") &&
+    Array.isArray(candidate.queue) &&
+    candidate.queue.every(
+      (item) =>
+        Boolean(item) &&
+        typeof item.type === "string" &&
+        typeof item.id === "string" &&
+        typeof item.label === "string" &&
+        typeof item.detail === "string" &&
+        typeof item.href === "string",
+    )
+  );
+}
 
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
+    private readonly cache: CacheService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   async get(auth: AuthContext) {
@@ -29,6 +66,20 @@ export class DashboardService {
       ...auth,
       requiredCapabilities: ["REPORTS_READ"],
     });
+    const cacheIdentity = JSON.stringify({
+      staffWards: [...staffWards].sort(),
+      attendanceWards: [...attendanceWards].sort(),
+      absenceWards: [...absenceWards].sort(),
+      workWards: [...workWards].sort(),
+      reviewAbsences,
+      reviewWork,
+      reportWards: [...reportScopes.wardIds].sort(),
+      reportSubcounties: [...reportScopes.subcountyIds].sort(),
+      reportCounties: [...reportScopes.countyIds].sort(),
+    });
+    const cacheKey = `${DASHBOARD_CACHE_PREFIX}${createHash("sha256").update(cacheIdentity).digest("hex")}`;
+    const cached = await this.cache.get(cacheKey, isDashboardResult);
+    if (cached) return cached;
 
     const [activeStaff, attendance, openSessions, approvedAbsences, pendingAbsences, pendingWork, reports, absenceQueue, workQueue] =
       await this.prisma.client.$transaction([
@@ -85,7 +136,7 @@ export class DashboardService {
         }),
       ]);
 
-    return {
+    const result: DashboardResult = {
       asOf: asOf.toISOString(),
       workDate: todayNairobi(),
       metrics: {
@@ -114,5 +165,7 @@ export class DashboardService {
         })),
       ],
     };
+    await this.cache.set(cacheKey, result, this.config.redis.dashboardTtlSeconds);
+    return result;
   }
 }

@@ -22,6 +22,7 @@ This document defines the target architecture for the rewrite. It follows
 | Backend | NestJS with Fastify adapter, TypeScript |
 | Database | PostgreSQL |
 | ORM | Prisma (schema, migrations, typed client) |
+| Supporting cache | Redis (optional; never authoritative) |
 | Validation | Zod (shared contracts) + NestJS DTO where useful |
 | Storage | S3-compatible object storage (private) |
 | Deployment | Docker + Railway |
@@ -36,6 +37,7 @@ NestJS    = authoritative business logic (auth, tenancy, attendance, staff,
             notifications, storage orchestration)
 PostgreSQL = structured source of truth
 S3        = binary evidence (private)
+Redis     = optional short-lived cache and distributed rate-limit counters
 ```
 
 No business logic is duplicated in Next.js. Prisma models are never exposed
@@ -147,13 +149,16 @@ PostgreSQL → deterministic aggregation → structured snapshot
 ## 11. Background processing
 
 Application-level scheduled tasks only (leave reminders, cleanup,
-reconciliation). No Redis/BullMQ/Kafka initially. Notification interface
-designed so a queue can be added later.
+reconciliation). Redis is available as optional shared infrastructure, but no
+queue framework is introduced yet. The notification interface and singleton
+Redis client allow a queue to be added later without moving durable state out
+of PostgreSQL.
 
 ## 12. Observability & security
 
 - Structured logs, request correlation ID.
-- `/health/live` + `/health/ready` (ready verifies DB + object storage).
+- `/health/live` + `/health/ready` (ready verifies DB + object storage and
+  reports optional Redis independently without failing readiness).
 - Security headers (CSP, X-Content-Type-Options, frame restrictions,
   Referrer-Policy, Permissions-Policy, HSTS after HTTPS verified).
 - Secrets from environment; validated at startup; fail clearly.

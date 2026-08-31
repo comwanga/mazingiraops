@@ -3,10 +3,12 @@ import { PrismaService } from "../prisma/prisma.service";
 import { APP_CONFIG } from "../config/config.module";
 import type { AppConfig } from "../config/config";
 import { ObjectStorage } from "../storage/object-storage.service";
+import { RedisService, type RedisStatus } from "../redis/redis.service";
 
 export interface HealthCheckResult {
   database: "up" | "down";
   storage: "up" | "down" | "not_configured";
+  redis: RedisStatus;
 }
 
 @Injectable()
@@ -16,6 +18,7 @@ export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorage,
+    private readonly redisService: RedisService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -45,6 +48,7 @@ export class HealthService {
       }
     }
 
-    return { database, storage };
+    const redis = await this.redisService.status();
+    return { database, storage, redis };
   }
 }

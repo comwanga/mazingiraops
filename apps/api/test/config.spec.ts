@@ -16,9 +16,30 @@ describe("loadConfig", () => {
     });
     expect(config.port).toBe(4000);
     expect(config.sessionHours).toBe(12);
+    expect(config.redis).toEqual({
+      url: undefined,
+      configured: false,
+      connectTimeoutMs: 2_000,
+      dashboardTtlSeconds: 120,
+    });
     expect(config.storage.configured).toBe(false);
     expect(config.smtp.configured).toBe(false);
     expect(config.ai.enabled).toBe(false);
+  });
+
+  it("loads optional Redis configuration and bounded dashboard TTL", () => {
+    const config = loadConfig({
+      DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+      REDIS_URL: "redis://default:secret@localhost:6379",
+      REDIS_CONNECT_TIMEOUT_MS: "1500",
+      DASHBOARD_CACHE_TTL_SECONDS: "180",
+    });
+    expect(config.redis).toEqual({
+      url: "redis://default:secret@localhost:6379",
+      configured: true,
+      connectTimeoutMs: 1500,
+      dashboardTtlSeconds: 180,
+    });
   });
 
   it("loads paired bootstrap administrator credentials", () => {

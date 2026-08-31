@@ -1221,6 +1221,47 @@ html[data-theme="dark"] .brand-background {
   min-width: 190px;
 }
 
+.worklog-success-panel {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-block: clamp(30px, 6vw, 56px);
+  text-align: center;
+}
+
+.worklog-success-panel h2,
+.worklog-success-panel p {
+  margin: 0;
+}
+
+.worklog-success-panel > p:not(.eyebrow) {
+  max-width: 620px;
+  line-height: 1.6;
+}
+
+.worklog-success-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--green) 45%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
+  color: var(--green);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.worklog-success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
 @media (max-width: 900px) {
   .worklog-fields > .worklog-field,
   .worklog-fields > .worklog-field-wide,
@@ -1255,6 +1296,11 @@ html[data-theme="dark"] .brand-background {
   }
 
   .worklog-submit-bar > button {
+    width: 100%;
+  }
+
+  .worklog-success-actions,
+  .worklog-success-actions > button {
     width: 100%;
   }
 }

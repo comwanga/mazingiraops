@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { DashNav } from "@/components/DashNav";
@@ -25,6 +25,7 @@ import {
   listReportsPage,
   previewReport,
 } from "@/lib/api";
+import { readDailyReportPrefill } from "@/lib/report-navigation";
 
 const KINDS: ReportKind[] = ["DAILY", "WEEKLY", "MONTHLY", "CUSTOM"];
 
@@ -83,6 +84,7 @@ export default function ReportsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const reportPrefillHandled = useRef(false);
   const [form, setForm] = useState({
     scopeId: "",
     startDate: nairobiToday(),
@@ -114,10 +116,51 @@ export default function ReportsPage() {
       const counties = await fetchOrganisationTree();
       const options = flattenScopes(counties);
       setScopes(options);
-      setForm((currentForm) => ({
-        ...currentForm,
-        scopeId: currentForm.scopeId || options[0]?.scopeId || "",
-      }));
+      const prefill = reportPrefillHandled.current
+        ? null
+        : readDailyReportPrefill(window.location.search);
+      reportPrefillHandled.current = true;
+      const accessiblePrefill = prefill
+        ? options.find((option) => option.scopeType === prefill.scopeType && option.scopeId === prefill.scopeId)
+        : null;
+
+      if (prefill && accessiblePrefill && current.capabilities.includes("REPORTS_GENERATE")) {
+        setForm((currentForm) => ({
+          ...currentForm,
+          scopeId: prefill.scopeId,
+          startDate: prefill.startDate,
+          endDate: prefill.endDate,
+          kind: prefill.kind,
+        }));
+        if (prefill.preview) {
+          try {
+            const result = await previewReport({
+              scopeType: prefill.scopeType,
+              scopeId: prefill.scopeId,
+              startDate: prefill.startDate,
+              endDate: prefill.endDate,
+              kind: prefill.kind,
+            });
+            setSelected(null);
+            setPreview(result);
+            setForm((currentForm) => ({
+              ...currentForm,
+              narrative: result.narrative,
+              recommendations: result.recommendations,
+            }));
+            setNotice(
+              "Daily report preview prepared with staff attendance. Submitted work appears after authorized approval.",
+            );
+          } catch (err) {
+            setError(apiErrorMessage(err, "Work log submitted, but the daily report preview could not be prepared"));
+          }
+        }
+      } else {
+        setForm((currentForm) => ({
+          ...currentForm,
+          scopeId: currentForm.scopeId || options[0]?.scopeId || "",
+        }));
+      }
       const archive = await listReportsPage({ page: reportPage, pageSize: 25 });
       setReports(archive.items);
       setReportTotal(archive.total);

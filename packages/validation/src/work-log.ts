@@ -19,6 +19,7 @@ export const createWorkLogSchema = z
     truthConfirmed: strictBooleanSchema.refine((value) => value, {
       message: "Confirm that the submitted work-log information is true",
     }),
+    clientSubmissionId: z.string().uuid().optional(),
     cleanupDone: strictBooleanSchema.default(false),
     cleanupStakeholders: z.string().trim().max(2000).default(""),
     climateTeamCount: z.coerce.number().int().min(0).default(0),

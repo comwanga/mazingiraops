@@ -24,6 +24,10 @@ function fileKey(file: EvidenceFileIdentity): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
+export function evidenceUploadKey(stage: EvidenceStage, file: EvidenceFileIdentity): string {
+  return `${stage}:${fileKey(file)}`;
+}
+
 export function addEvidenceFiles<T extends EvidenceFileIdentity>(
   current: T[],
   incoming: T[],

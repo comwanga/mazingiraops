@@ -462,6 +462,7 @@ model WorkLog {
   challenges  String?
   suggestedSolutions String?
   truthConfirmed Boolean           @default(false)
+  clientSubmissionId String?       @unique
   status      WorkLogStatus     @default(DRAFT)
   version     Int               @default(1)
   submittedBy String

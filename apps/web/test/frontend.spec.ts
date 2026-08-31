@@ -22,6 +22,11 @@ import {
   buildAttendanceSessionInput,
   resolveAttendanceWardId,
 } from "@/lib/attendance-session";
+import {
+  EVIDENCE_MAX_PER_STAGE,
+  addEvidenceFiles,
+  createEvidenceFileSelection,
+} from "@/lib/work-log-evidence";
 
 describe("capability-aware navigation", () => {
   it("only exposes modules granted to the account", () => {
@@ -144,6 +149,43 @@ describe("attendance session setup", () => {
       location: "Makina Ward",
       durationMinutes: 120,
     });
+  });
+});
+
+describe("work-log photo selection", () => {
+  const photo = (name: string, lastModified: number) => ({ name, size: 1024, lastModified });
+
+  it("starts every evidence stage with an independent empty selection", () => {
+    expect(createEvidenceFileSelection()).toEqual({ BEFORE: [], DURING: [], AFTER: [] });
+  });
+
+  it("accepts up to four unique photos for one evidence stage", () => {
+    const result = addEvidenceFiles([], Array.from(
+      { length: EVIDENCE_MAX_PER_STAGE },
+      (_, index) => photo(`before-${index + 1}.jpg`, index),
+    ));
+
+    expect(result.files).toHaveLength(4);
+    expect(result.rejectedCount).toBe(0);
+  });
+
+  it("keeps the four-photo threshold and ignores duplicate or excess files", () => {
+    const existing = [photo("before-1.jpg", 1)];
+    const result = addEvidenceFiles(existing, [
+      photo("before-1.jpg", 1),
+      photo("before-2.jpg", 2),
+      photo("before-3.jpg", 3),
+      photo("before-4.jpg", 4),
+      photo("before-5.jpg", 5),
+    ]);
+
+    expect(result.files.map((file) => file.name)).toEqual([
+      "before-1.jpg",
+      "before-2.jpg",
+      "before-3.jpg",
+      "before-4.jpg",
+    ]);
+    expect(result.rejectedCount).toBe(2);
   });
 });
 

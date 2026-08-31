@@ -108,6 +108,7 @@ export type CompletionStatus = (typeof COMPLETION_STATUSES)[number];
 
 export const EVIDENCE_STAGES = ["BEFORE", "DURING", "AFTER"] as const;
 export type EvidenceStage = (typeof EVIDENCE_STAGES)[number];
+export const EVIDENCE_MAX_PER_STAGE = 4;
 
 export const DOCUMENT_SENSITIVITIES = ["MEDICAL", "GENERAL"] as const;
 export type DocumentSensitivity = (typeof DOCUMENT_SENSITIVITIES)[number];

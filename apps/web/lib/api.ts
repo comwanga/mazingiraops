@@ -559,6 +559,9 @@ export interface AttendanceQuery {
   wardId?: string;
   sessionId?: string;
   workDate?: string;
+  active?: boolean;
+  page?: number;
+  pageSize?: number;
 }
 
 function attendanceQuery(query?: AttendanceQuery): string {
@@ -566,6 +569,9 @@ function attendanceQuery(query?: AttendanceQuery): string {
   if (query?.wardId) params.set("wardId", query.wardId);
   if (query?.sessionId) params.set("sessionId", query.sessionId);
   if (query?.workDate) params.set("workDate", query.workDate);
+  if (query?.active !== undefined) params.set("active", String(query.active));
+  if (query?.page) params.set("page", String(query.page));
+  if (query?.pageSize) params.set("pageSize", String(query.pageSize));
   return params.toString() ? `?${params.toString()}` : "";
 }
 

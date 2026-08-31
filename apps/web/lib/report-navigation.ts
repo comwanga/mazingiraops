@@ -1,4 +1,12 @@
 export function buildDailyReportHref(wardId: string, workDate: string): string {
+  return buildReportHref(wardId, workDate, "work-log");
+}
+
+export function buildAttendanceReportHref(wardId: string, workDate: string): string {
+  return buildReportHref(wardId, workDate, "attendance");
+}
+
+function buildReportHref(wardId: string, workDate: string, source: "work-log" | "attendance"): string {
   const params = new URLSearchParams({
     scopeType: "WARD",
     scopeId: wardId,
@@ -6,7 +14,7 @@ export function buildDailyReportHref(wardId: string, workDate: string): string {
     endDate: workDate,
     kind: "DAILY",
     preview: "1",
-    source: "work-log",
+    source,
   });
   return `/reports?${params.toString()}`;
 }
@@ -28,7 +36,7 @@ export function readDailyReportPrefill(search: string): DailyReportPrefill | nul
   const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
   if (
-    params.get("source") !== "work-log" ||
+    !["work-log", "attendance"].includes(params.get("source") ?? "") ||
     params.get("scopeType") !== "WARD" ||
     params.get("kind") !== "DAILY" ||
     !scopeId ||

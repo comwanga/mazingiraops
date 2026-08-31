@@ -119,6 +119,7 @@ export default function ReportsPage() {
       const prefill = reportPrefillHandled.current
         ? null
         : readDailyReportPrefill(window.location.search);
+      const attendancePrefill = new URLSearchParams(window.location.search).get("source") === "attendance";
       reportPrefillHandled.current = true;
       const accessiblePrefill = prefill
         ? options.find((option) => option.scopeType === prefill.scopeType && option.scopeId === prefill.scopeId)
@@ -149,10 +150,14 @@ export default function ReportsPage() {
               recommendations: result.recommendations,
             }));
             setNotice(
-              "Daily report preview prepared with staff attendance. Submitted work appears after authorized approval.",
+              attendancePrefill
+                ? "Completed attendance register loaded into the daily report preview."
+                : "Daily report preview prepared with staff attendance. Submitted work appears after authorized approval.",
             );
           } catch (err) {
-            setError(apiErrorMessage(err, "Work log submitted, but the daily report preview could not be prepared"));
+            setError(apiErrorMessage(err, attendancePrefill
+              ? "The attendance register is complete, but the daily report preview could not be prepared"
+              : "Work log submitted, but the daily report preview could not be prepared"));
           }
         }
       } else {

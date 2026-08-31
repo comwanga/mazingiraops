@@ -2714,3 +2714,61 @@ html[data-theme="dark"] .status-badge {
     transition-duration: 0.01ms !important;
   }
 }
+
+.active-session-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--green) 38%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--green) 8%, var(--surface));
+}
+
+.active-session-card > div,
+.attendance-state {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.active-session-card strong,
+.attendance-state strong {
+  font-size: 1.02rem;
+}
+
+.attendance-state {
+  margin: 16px 0;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.attendance-state.live {
+  border-left-color: var(--green);
+}
+
+.attendance-state.action-required {
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, var(--surface));
+}
+
+.attendance-state.complete {
+  border-left-color: var(--green);
+  background: color-mix(in srgb, var(--green) 8%, var(--surface));
+}
+
+.attendance-state button {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .active-session-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

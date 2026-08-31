@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from "@nestjs/common";
+import { RateLimitService } from "../redis/rate-limit.service";
 
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -14,23 +15,32 @@ interface ThrottleEntry {
 export class LoginThrottleService {
   private readonly attempts = new Map<string, ThrottleEntry>();
 
-  check(key: string): void {
+  constructor(private readonly rateLimit: RateLimitService) {}
+
+  async consume(key: string): Promise<void> {
+    const distributed = await this.rateLimit.consume("login", key, MAX_ATTEMPTS, WINDOW_MS);
+    if (distributed) {
+      if (!distributed.allowed) this.tooManyAttempts();
+      return;
+    }
+    this.checkInMemory(key);
+    this.recordFailureInMemory(key);
+  }
+
+  private checkInMemory(key: string): void {
     const entry = this.attempts.get(key);
     if (!entry) {
       return;
     }
     if (entry.lockedUntil > Date.now()) {
-      throw new HttpException(
-        "Too many failed attempts. Try again later.",
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      this.tooManyAttempts();
     }
     if (Date.now() - entry.firstAttemptAt > WINDOW_MS) {
       this.attempts.delete(key);
     }
   }
 
-  recordFailure(key: string): void {
+  private recordFailureInMemory(key: string): void {
     this.prune();
     const now = Date.now();
     const entry = this.attempts.get(key) ?? { count: 0, lockedUntil: 0, firstAttemptAt: now };
@@ -64,8 +74,9 @@ export class LoginThrottleService {
     }
   }
 
-  recordSuccess(key: string): void {
+  async recordSuccess(key: string): Promise<void> {
     this.attempts.delete(key);
+    await this.rateLimit.reset("login", key);
   }
 
   reset(key: string): void {
@@ -74,5 +85,12 @@ export class LoginThrottleService {
 
   resetAll(): void {
     this.attempts.clear();
+  }
+
+  private tooManyAttempts(): never {
+    throw new HttpException(
+      "Too many failed attempts. Try again later.",
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 }

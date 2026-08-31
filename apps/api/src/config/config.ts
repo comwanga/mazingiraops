@@ -6,6 +6,9 @@ const envSchema = z
     APP_ENV: z.enum(["development", "test", "production"]).default("development"),
     PORT: z.coerce.number().int().positive().default(4000),
     DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+    REDIS_URL: z.string().url().optional(),
+    REDIS_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(2_000),
+    DASHBOARD_CACHE_TTL_SECONDS: z.coerce.number().int().positive().max(300).default(120),
     PUBLIC_BASE_URL: z.string().url().optional(),
     CORS_ORIGINS: z.string().optional(),
     SESSION_HOURS: z.coerce.number().int().positive().default(12),
@@ -81,6 +84,12 @@ export interface AppConfig {
   env: string;
   port: number;
   databaseUrl: string;
+  redis: {
+    url?: string;
+    configured: boolean;
+    connectTimeoutMs: number;
+    dashboardTtlSeconds: number;
+  };
   publicBaseUrl: string;
   corsOrigins: string[];
   sessionHours: number;
@@ -122,6 +131,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     env: parsed.APP_ENV,
     port: parsed.PORT,
     databaseUrl: parsed.DATABASE_URL,
+    redis: {
+      url: parsed.REDIS_URL,
+      configured: Boolean(parsed.REDIS_URL),
+      connectTimeoutMs: parsed.REDIS_CONNECT_TIMEOUT_MS,
+      dashboardTtlSeconds: parsed.DASHBOARD_CACHE_TTL_SECONDS,
+    },
     publicBaseUrl: parsed.PUBLIC_BASE_URL ?? "http://127.0.0.1:3000",
     corsOrigins: (parsed.CORS_ORIGINS ?? "")
       .split(",")

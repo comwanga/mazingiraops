@@ -5,6 +5,7 @@ export function testConfig(databaseUrl: string): AppConfig {
     env: "test",
     port: 0,
     databaseUrl,
+    redis: { configured: false, connectTimeoutMs: 2_000, dashboardTtlSeconds: 120 },
     publicBaseUrl: "http://localhost:3000",
     sessionHours: 12,
     secureCookies: false,

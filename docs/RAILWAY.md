@@ -8,6 +8,7 @@
    - **api**: connects to the repository. `railway.json` builds `infrastructure/Dockerfile.api`, applies migrations and reference seed data in Railway's pre-deploy phase, starts the API on its assigned `PORT`, and checks `/health/ready` before promotion. Leave dashboard build/deploy command overrides empty so the checked-in configuration remains authoritative.
    - **web**: connects to the repository. Set its config-file path to `infrastructure/railway.web.json`. Add `API_INTERNAL_URL` as a runtime variable pointing to the API service's Railway private-network origin (for example `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:4000`; replace `api` if the service has a different name or port). The Next.js server proxies browser requests through the web origin.
    - **PostgreSQL**: add a Postgres service to the same Railway project.
+   - **Redis** (optional): add Railway's Redis service and set the api service's `REDIS_URL` to `${{Redis.REDIS_URL}}`. Redis supports cache and distributed throttling only; PostgreSQL remains authoritative and the API continues without Redis.
 4. Add the variables listed below to the api service.
 5. Generate a public domain for the web service. An API public domain is optional because web-to-API traffic uses Railway private networking.
 6. Add an S3-compatible object-storage service and wire the `S3_*` variables below. Production refuses to start without S3 configuration so evidence is never silently written to the ephemeral container filesystem.
@@ -27,6 +28,17 @@ OWNER_SETUP_TOKEN=<a separate random one-time token of at least 32 characters>
 BOOTSTRAP_ADMIN_EMAIL=<initial system administrator email>
 BOOTSTRAP_ADMIN_PASSWORD=<temporary password of at least 12 characters>
 BOOTSTRAP_ADMIN_NAME=<administrator display name; optional>
+```
+
+Optional Redis tuning variables are `REDIS_CONNECT_TIMEOUT_MS` (default `2000`) and
+`DASHBOARD_CACHE_TTL_SECONDS` (default `120`, maximum `300`). Do not expose a Redis
+public domain: use Railway's generated private connection URL. If Redis is omitted or
+temporarily unavailable, dashboard reads fall back to PostgreSQL and login throttling
+falls back to the bounded per-instance limiter. `/health/ready` reports Redis separately
+without making optional Redis downtime fail readiness.
+
+```text
+REDIS_URL=${{Redis.REDIS_URL}}
 ```
 
 `PUBLIC_BASE_URL` must be the public **web** origin because attendance QR codes link to the web app's `/check-in/{token}` screen. It is required and must use HTTPS in production. If the web service is not named `web`, update the Railway variable reference accordingly. For a custom domain use:

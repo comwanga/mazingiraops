@@ -1,4 +1,5 @@
 import { Module, NestModule, MiddlewareConsumer } from "@nestjs/common";
+import { APP_INTERCEPTOR } from "@nestjs/core";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { HealthModule } from "./health/health.module";
@@ -14,11 +15,14 @@ import { EvidenceModule } from "./evidence/evidence.module";
 import { ReportModule } from "./report/report.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { RequestLoggingMiddleware } from "./common/request-logging.middleware";
+import { RedisModule } from "./redis/redis.module";
+import { DashboardCacheInvalidationInterceptor } from "./redis/dashboard-cache-invalidation.interceptor";
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
+    RedisModule,
     AuditModule,
     HealthModule,
     AuthModule,
@@ -31,6 +35,9 @@ import { RequestLoggingMiddleware } from "./common/request-logging.middleware";
     EvidenceModule,
     ReportModule,
     DashboardModule,
+  ],
+  providers: [
+    { provide: APP_INTERCEPTOR, useClass: DashboardCacheInvalidationInterceptor },
   ],
 })
 export class AppModule implements NestModule {

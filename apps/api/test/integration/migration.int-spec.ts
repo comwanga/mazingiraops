@@ -20,6 +20,7 @@ function appConfig(documentStoreDir: string) {
     env: "test",
     port: 0,
     databaseUrl: process.env.TEST_DATABASE_URL!,
+    redis: { configured: false, connectTimeoutMs: 2_000, dashboardTtlSeconds: 120 },
     publicBaseUrl: "http://localhost:3000",
     sessionHours: 12,
     secureCookies: false,

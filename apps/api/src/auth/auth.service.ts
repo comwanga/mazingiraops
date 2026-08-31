@@ -249,11 +249,10 @@ export class AuthService implements OnApplicationBootstrap {
 
   async login(input: { email: string; password: string }, meta: { sourceIp?: string; requestId?: string }): Promise<LoginResult> {
     const key = `${input.email}|${meta.sourceIp ?? "unknown"}`;
-    this.throttle.check(key);
+    await this.throttle.consume(key);
 
     const user = await this.prisma.client.user.findUnique({ where: { email: input.email } });
     if (!user || !verifyPassword(input.password, user.passwordHash)) {
-      this.throttle.recordFailure(key);
       await this.audit.record({
         action: "AUTH.LOGIN_FAILED",
         targetType: "User",
@@ -265,7 +264,6 @@ export class AuthService implements OnApplicationBootstrap {
       throw new UnauthorizedException("Invalid email or password");
     }
     if (!user.active) {
-      this.throttle.recordFailure(key);
       await this.audit.record({
         action: "AUTH.LOGIN_DISABLED",
         targetType: "User",
@@ -276,7 +274,7 @@ export class AuthService implements OnApplicationBootstrap {
       throw new UnauthorizedException("Invalid email or password");
     }
 
-    this.throttle.recordSuccess(key);
+    await this.throttle.recordSuccess(key);
     const token = randomSessionToken();
     const expiresAt = sessionExpiry(this.config);
     const session = await this.prisma.client.userSession.create({

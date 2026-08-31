@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   db:
     image: postgres:16-alpine
     environment:
@@ -24,6 +34,7 @@ services:
       APP_ENV: development
       PORT: 4000
       DATABASE_URL: postgresql://ward_ops:${POSTGRES_PASSWORD}@db:5432/ward_ops
+      REDIS_URL: redis://redis:6379
       OWNER_SETUP_TOKEN: ${OWNER_SETUP_TOKEN:?Set OWNER_SETUP_TOKEN}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       SECURE_COOKIES: "false"

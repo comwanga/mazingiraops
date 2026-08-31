@@ -1,77 +1,91 @@
 name: Production Status
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  deployment_status:
 
 permissions:
+  checks: read
   contents: read
   deployments: write
-  statuses: read
 
 concurrency:
   group: production-status
   cancel-in-progress: true
 
 jobs:
-  verify-production:
-    name: Verify Railway production
+  reconcile-production:
+    name: Reconcile Railway production
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push'
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment == 'Mazingiraops / production' &&
+      github.event.deployment.creator.login == 'railway-app[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: Mazingiraops / production
-      url: https://mazingiraops.xyz
     env:
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
       GH_TOKEN: ${{ github.token }}
+      PRODUCTION_ENVIRONMENT: Mazingiraops / production
+      PRODUCTION_URL: https://mazingiraops.xyz
 
     steps:
-      - name: Wait for Railway commit deployments
+      - name: Allow Railway service statuses to settle
+        shell: bash
+        run: sleep 45
+
+      - name: Verify current main CI
+        id: release
         shell: bash
         run: |
           set -euo pipefail
 
-          api_state=pending
-          web_state=pending
+          main_sha="$(
+            curl --fail --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/main" \
+              | jq -r '.sha'
+          )"
+
+          if [ -z "${main_sha}" ] || [ "${main_sha}" = null ]; then
+            echo "Could not resolve the current main commit." >&2
+            exit 1
+          fi
+
+          echo "main_sha=${main_sha}" >> "${GITHUB_OUTPUT}"
+
+          quality_status=queued
+          quality_conclusion=pending
 
           for attempt in $(seq 1 40); do
-            statuses="$({
+            checks="$(
               curl --fail --silent --show-error \
                 --header "Accept: application/vnd.github+json" \
                 --header "Authorization: Bearer ${GH_TOKEN}" \
                 --header "X-GitHub-Api-Version: 2022-11-28" \
-                "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${DEPLOY_SHA}/status"
-            } || true)"
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${main_sha}/check-runs"
+            )"
 
-            if [ -n "${statuses}" ]; then
-              api_state="$(printf '%s' "${statuses}" | jq -r \
-                '[.statuses[] | select(.context == "Mazingiraops - api")][0].state // "pending"')"
-              web_state="$(printf '%s' "${statuses}" | jq -r \
-                '[.statuses[] | select(.context == "Mazingiraops - web")][0].state // "pending"')"
-            fi
+            quality_status="$(printf '%s' "${checks}" | jq -r \
+              '[.check_runs[] | select(.name == "Lint / typecheck / test / build")][0].status // "queued"')"
+            quality_conclusion="$(printf '%s' "${checks}" | jq -r \
+              '[.check_runs[] | select(.name == "Lint / typecheck / test / build")][0].conclusion // "pending"')"
 
-            echo "Railway status attempt ${attempt}: api=${api_state}, web=${web_state}"
+            echo "Main CI attempt ${attempt}: status=${quality_status}, conclusion=${quality_conclusion}"
 
-            if [ "${api_state}" = success ] && [ "${web_state}" = success ]; then
+            if [ "${quality_status}" = completed ] && [ "${quality_conclusion}" = success ]; then
               break
             fi
 
-            if [ "${api_state}" = failure ] || [ "${api_state}" = error ] || \
-               [ "${web_state}" = failure ] || [ "${web_state}" = error ]; then
-              echo "Railway reported a failed production deployment for ${DEPLOY_SHA}." >&2
+            if [ "${quality_status}" = completed ] && [ "${quality_conclusion}" != success ]; then
+              echo "Required main CI did not pass for ${main_sha}." >&2
               exit 1
             fi
 
             sleep 15
           done
 
-          if [ "${api_state}" != success ] || [ "${web_state}" != success ]; then
-            echo "Timed out waiting for Railway production deployment ${DEPLOY_SHA}." >&2
+          if [ "${quality_status}" != completed ] || [ "${quality_conclusion}" != success ]; then
+            echo "Timed out waiting for required main CI on ${main_sha}." >&2
             exit 1
           fi
 
@@ -85,7 +99,7 @@ jobs:
             api_ok=false
 
             if curl --fail --silent --show-error --location --max-time 20 \
-              https://mazingiraops.xyz/login --output /dev/null; then
+              "${PRODUCTION_URL}/login" --output /dev/null; then
               web_ok=true
             fi
 
@@ -111,3 +125,59 @@ jobs:
 
           echo "Production endpoints did not become healthy in time." >&2
           exit 1
+
+      - name: Publish canonical production deployment
+        shell: bash
+        env:
+          MAIN_SHA: ${{ steps.release.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+
+          deployment_payload="$(jq -n \
+            --arg ref "${MAIN_SHA}" \
+            --arg environment "${PRODUCTION_ENVIRONMENT}" \
+            '{
+              ref: $ref,
+              environment: $environment,
+              auto_merge: false,
+              required_contexts: [],
+              description: "Verified Railway production"
+            }')"
+
+          deployment="$(
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments" \
+              --data "${deployment_payload}"
+          )"
+
+          deployment_id="$(printf '%s' "${deployment}" | jq -r '.id')"
+          if [ -z "${deployment_id}" ] || [ "${deployment_id}" = null ]; then
+            echo "GitHub did not return a deployment ID." >&2
+            exit 1
+          fi
+
+          status_payload="$(jq -n \
+            --arg environment "${PRODUCTION_ENVIRONMENT}" \
+            --arg environment_url "${PRODUCTION_URL}" \
+            '{
+              state: "success",
+              environment: $environment,
+              environment_url: $environment_url,
+              description: "Railway production verified",
+              auto_inactive: true
+            }')"
+
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/deployments/${deployment_id}/statuses" \
+            --data "${status_payload}" \
+            > /dev/null
+
+          echo "Published verified production deployment ${deployment_id} for ${MAIN_SHA}."

@@ -31,6 +31,16 @@ import {
 
 const DURATIONS = [30, 60, 120, 240, 480];
 const MANUAL_STATUSES = ["PRESENT", "ABSENT", "OFF_DUTY", "SICK_OFF"];
+const ROSTER_STATUS_FILTERS = [
+  "ALL",
+  "PRESENT",
+  "LATE",
+  "ABSENT",
+  "LEAVE",
+  "SICK_OFF",
+  "OFF_DUTY",
+  "OFFICIAL_DUTY",
+] as const;
 
 function nairobiToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -81,6 +91,8 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ wardId: "", durationMinutes: 120 });
   const [rosterDate, setRosterDate] = useState(nairobiToday());
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterStatus, setRosterStatus] = useState<(typeof ROSTER_STATUS_FILTERS)[number]>("ALL");
   const [manualForm, setManualForm] = useState({ status: "PRESENT", reason: "" });
   const [correctionForm, setCorrectionForm] = useState({ status: "PRESENT", reason: "" });
 
@@ -314,6 +326,14 @@ export default function AttendancePage() {
     : null;
   const pendingApprovalCount = roster?.filter((row) => row.approvalAllowed).length ?? 0;
   const registerComplete = Boolean(latestSession && !activeSession && pendingApprovalCount === 0);
+  const rosterQuery = rosterSearch.trim().toLowerCase();
+  const filteredRoster = roster?.filter((row) =>
+    (rosterStatus === "ALL" || row.status === rosterStatus) &&
+    [row.employee.fullName, row.employee.employeeNumber, row.detail]
+      .join(" ")
+      .toLowerCase()
+      .includes(rosterQuery),
+  ) ?? null;
 
   return (
     <main className="dashboard" aria-busy={loading}>
@@ -352,6 +372,8 @@ export default function AttendancePage() {
         <div className="filter-row">
           <label>Ward<select value={form.wardId} onChange={(event) => void loadRoster(event.target.value)}><option value="">Select ward...</option>{wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name} ({ward.code})</option>)}</select></label>
           <label>Date<input type="date" value={rosterDate} onChange={(event) => void loadRoster(form.wardId, event.target.value)} /></label>
+          <label>Status<select value={rosterStatus} onChange={(event) => setRosterStatus(event.target.value as (typeof ROSTER_STATUS_FILTERS)[number])}>{ROSTER_STATUS_FILTERS.map((status) => <option key={status} value={status}>{status === "ALL" ? "All statuses" : status === "ABSENT" ? "Absent staff" : status.replace(/_/g, " ").toLowerCase()}</option>)}</select></label>
+          <label>Find staff<input type="search" value={rosterSearch} placeholder="Name or employee ID" onChange={(event) => setRosterSearch(event.target.value)} /></label>
           <button type="button" className="secondary-btn" disabled={!form.wardId} onClick={() => void loadRoster(form.wardId)}>Refresh roster</button>
         </div>
         {activeSession && <div className="attendance-state live" role="status"><strong>Check-in is live.</strong><span>The register updates every five seconds until {formatTime(activeSession.closesAt)}.</span></div>}
@@ -359,7 +381,8 @@ export default function AttendancePage() {
         {registerComplete && <div className="attendance-state complete" role="status"><strong>Attendance register complete</strong><span>Check-in has closed and every attendance review is resolved.</span>{canGenerateReports && <button type="button" onClick={() => router.push(buildAttendanceReportHref(form.wardId, rosterDate))}>Generate attendance report</button>}</div>}
         {!roster && <p className="empty">Select a ward to view its roster.</p>}
         {roster && roster.length === 0 && <p className="empty">No active staff are assigned to this ward.</p>}
-        {roster && roster.length > 0 && <div className="table-wrap"><table className="data-table"><thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Detail</th>{canManage && <th>Action</th>}</tr></thead><tbody>{roster.map((row) => <tr key={row.employee.id}><td>{row.employee.employeeNumber}</td><td>{row.employee.fullName}</td><td><span className={`badge ${row.status.toLowerCase()}`}>{row.status.replace(/_/g, " ")}</span></td><td>{row.detail}</td>{canManage && <td>{row.approvalAllowed ? <div className="doc-actions"><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "APPROVE" }); setReviewNote(""); }}>Approve</button><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "REJECT" }); setReviewNote(""); }}>Reject</button></div> : row.correctionAllowed ? <button type="button" className="link-btn" onClick={() => { setCorrectionRecord(row); setCorrectionForm({ status: row.status, reason: "" }); }}>Correct</button> : row.manualEditable ? <button type="button" className="link-btn" onClick={() => setManualEmployee(row)}>Record manually</button> : <span className="muted-text">Recorded</span>}</td>}</tr>)}</tbody></table></div>}
+        {roster && roster.length > 0 && filteredRoster?.length === 0 && <p className="empty">No staff match the selected status or search.</p>}
+        {filteredRoster && filteredRoster.length > 0 && <div className="table-wrap"><table className="data-table"><thead><tr><th>Number</th><th>Name</th><th>Status</th><th>Detail</th>{canManage && <th>Action</th>}</tr></thead><tbody>{filteredRoster.map((row) => <tr key={row.employee.id}><td>{row.employee.employeeNumber}</td><td>{row.employee.fullName}</td><td><span className={`badge ${row.status.toLowerCase()}`}>{row.status.replace(/_/g, " ")}</span></td><td>{row.detail}</td>{canManage && <td>{row.approvalAllowed ? <div className="doc-actions"><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "APPROVE" }); setReviewNote(""); }}>Approve</button><button type="button" className="link-btn" onClick={() => { setPendingReview({ row, action: "REJECT" }); setReviewNote(""); }}>Reject</button></div> : row.correctionAllowed ? <button type="button" className="link-btn" onClick={() => { setCorrectionRecord(row); setCorrectionForm({ status: row.status, reason: "" }); }}>Correct</button> : row.manualEditable ? <button type="button" className="link-btn" onClick={() => setManualEmployee(row)}>Record manually</button> : <span className="muted-text">Recorded</span>}</td>}</tr>)}</tbody></table></div>}
 
         {pendingReview && <form className="manual-form" onSubmit={onReviewAbsence} aria-labelledby="absence-review-title"><div><h3 id="absence-review-title">{pendingReview.action === "APPROVE" ? "Approve" : "Reject"} {formatAbsenceReason(pendingReview.row.absenceReason)}</h3><p className="muted-text">Reviewing {pendingReview.row.employee.fullName}&apos;s employee-submitted declaration.</p></div>{pendingReview.action === "REJECT" && <label>Rejection reason<input value={reviewNote} minLength={5} maxLength={2000} onChange={(event) => setReviewNote(event.target.value)} required /></label>}<div className="dialog-actions"><button type="button" className="secondary-btn" onClick={() => { setPendingReview(null); setReviewNote(""); }}>Cancel</button><button type="submit" disabled={submitting}>{submitting ? "Saving..." : pendingReview.action === "APPROVE" ? "Approve declaration" : "Reject declaration"}</button></div></form>}
 

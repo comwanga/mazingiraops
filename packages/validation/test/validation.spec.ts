@@ -3,6 +3,7 @@ import { employeeNumberSchema, kenyanPhoneSchema } from "../src/common";
 import { createWorkLogSchema } from "../src/work-log";
 import { createAbsenceSchema } from "../src/absence";
 import { createEmployeeSchema, createEmployeeAssignmentSchema } from "../src/staff";
+import { reportQuerySchema } from "../src/report";
 import {
   createAttendanceSessionSchema,
   checkInSchema,
@@ -34,6 +35,16 @@ describe("kenyanPhoneSchema", () => {
 
   it("rejects non-Kenyan numbers", () => {
     expect(() => kenyanPhoneSchema.parse("12345")).toThrow();
+  });
+});
+
+describe("reportQuerySchema", () => {
+  it("accepts a reporting-date history filter", () => {
+    expect(reportQuerySchema.parse({ date: "2026-09-03" }).date).toBe("2026-09-03");
+  });
+
+  it("rejects malformed history dates", () => {
+    expect(() => reportQuerySchema.parse({ date: "03/09/2026" })).toThrow();
   });
 });
 

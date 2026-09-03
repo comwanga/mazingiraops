@@ -1071,6 +1071,9 @@ export interface ReportSummary {
   periodEnd: string;
   status: ReportStatus;
   title: string;
+  scopeName: string | null;
+  signedBy: string | null;
+  signedTitle: string | null;
   version: number;
   finalizedBy: string | null;
   finalizedAt: string | null;
@@ -1126,6 +1129,7 @@ export async function listReports(query?: {
   scopeType?: ReportScopeType;
   scopeId?: string;
   kind?: ReportKind;
+  date?: string;
 }): Promise<ReportSummary[]> {
   return (await listReportsPage(query)).items;
 }
@@ -1134,6 +1138,7 @@ export async function listReportsPage(query?: {
   scopeType?: ReportScopeType;
   scopeId?: string;
   kind?: ReportKind;
+  date?: string;
   page?: number;
   pageSize?: number;
 }): Promise<{ items: ReportSummary[]; total: number; page: number; pageSize: number }> {
@@ -1141,6 +1146,7 @@ export async function listReportsPage(query?: {
   if (query?.scopeType) params.set("scopeType", query.scopeType);
   if (query?.scopeId) params.set("scopeId", query.scopeId);
   if (query?.kind) params.set("kind", query.kind);
+  if (query?.date) params.set("date", query.date);
   if (query?.page) params.set("page", String(query.page));
   if (query?.pageSize) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString() ? `?${params.toString()}` : "";

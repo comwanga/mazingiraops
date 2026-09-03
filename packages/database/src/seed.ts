@@ -51,6 +51,7 @@ const ROLE_CAPABILITIES: Record<RoleCode, CapabilityCode[]> = {
     "ABSENCE_MANAGE",
     "REPORTS_READ",
     "REPORTS_GENERATE",
+    "REPORTS_FINALIZE",
   ],
   SUBCOUNTY_REVIEWER: [
     "STAFF_READ",

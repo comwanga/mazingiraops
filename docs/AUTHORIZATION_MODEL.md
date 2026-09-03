@@ -64,7 +64,7 @@ USERS_MANAGE          users.manage          create/disable users, review access 
 | ABSENCE_REVIEW | ✗ | ✓ | ✓ | ✗ | ✗ |
 | MEDICAL_READ | ✗ | ✗ | ✓ | ✗ | ✗ |
 | REPORTS_READ | ✓ | ✓ | ✓ | ✓¹ | ✓ |
-| REPORTS_FINALIZE | ✗ | ✓ | ✗ | ✗ | ✗ |
+| REPORTS_FINALIZE | ✓ | ✓ | ✗ | ✗ | ✗ |
 | AUDIT_READ | ✗ | ✓ | ✗ | ✗ | ✗ |
 | USERS_MANAGE | ✗ | ✗ | ✗ | ✗ | ✓ |
 

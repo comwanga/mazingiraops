@@ -152,6 +152,7 @@ export default function WorkLogsPage() {
     }
     setSubmitting(true);
     let draft: WorkLog | null = null;
+    let phase: "creating" | "uploading" | "submitting" = "creating";
     try {
       submissionId.current ??= crypto.randomUUID();
       draft = await createWorkLog({
@@ -165,6 +166,7 @@ export default function WorkLogsPage() {
         cleanupStakeholders: form.cleanupDone ? form.cleanupStakeholders : "",
         climateTeamCount: form.cleanupDone ? form.climateTeamCount : 0,
       });
+      phase = "uploading";
       for (const { stage, file } of selectedPhotos) {
         const uploadKey = evidenceUploadKey(stage, file);
         if (uploadedPhotoKeys.current.has(uploadKey)) continue;
@@ -174,6 +176,7 @@ export default function WorkLogsPage() {
         await uploadEvidence(draft.id, prepared, stage, "", setUploadProgress);
         uploadedPhotoKeys.current.add(uploadKey);
       }
+      phase = "submitting";
       const submitted = await workLogAction(draft.id, {
         action: "SUBMIT",
         expectedVersion: draft.version,
@@ -209,10 +212,12 @@ export default function WorkLogsPage() {
       submissionId.current = null;
       uploadedPhotoKeys.current.clear();
     } catch (err) {
-      if (draft) {
-        setNotice("The work log remains a draft. Resolve the photo error, then retry this submission.");
+      if (phase === "uploading") {
+        setNotice("The work log was created as a draft, but photo upload failed. Resolve the photo error, then retry submission.");
+      } else if (phase === "submitting") {
+        setNotice("The work log and photos were saved as a draft, but final submission failed. Retry submitting this report.");
       }
-      setError(apiErrorMessage(err, "Unable to create work log"));
+      setError(apiErrorMessage(err, "Unable to complete work log submission"));
     } finally {
       setUploading(null);
       setUploadProgress(null);

@@ -32,7 +32,7 @@ const envSchema = z
     AI_BASE_URL: z.string().default("https://api.groq.com/openai/v1"),
     AI_API_KEY: z.string().optional(),
     AI_MODEL: z.string().default("llama-3.1-8b-instant"),
-    MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(5 * 1024 * 1024),
+    MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(15 * 1024 * 1024),
     DOCUMENT_STORE_DIR: z.string().default("data/objects"),
   })
   .superRefine((env, ctx) => {

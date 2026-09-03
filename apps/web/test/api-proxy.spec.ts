@@ -61,6 +61,9 @@ describe("runtime API proxy", () => {
     expect(options.method).toBe("POST");
     expect((options.headers as Headers).get("cookie")).toBe("existing=value");
     expect((options.headers as Headers).get("x-csrf-token")).toBe("csrf-token");
+    expect((options.headers as Headers).get("content-length")).toBe(
+      String(Buffer.byteLength(JSON.stringify({ email: "admin@example.test", password: "Temporary-123" }))),
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("ward_session=opaque");
     await expect(response.json()).resolves.toEqual({ user: { mustChangePassword: true } });

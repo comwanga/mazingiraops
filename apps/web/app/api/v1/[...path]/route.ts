@@ -68,16 +68,20 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
     if (value) headers.set(name, value);
   }
 
+  const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  const body = hasBody ? Buffer.from(await request.arrayBuffer()) : undefined;
+  if (body) {
+    headers.set("content-length", String(body.length));
+  }
+
   try {
     const upstream = await fetch(target, {
       method: request.method,
       headers,
-      body: request.body,
+      body,
       cache: "no-store",
       redirect: "manual",
-      // Node's fetch requires this when streaming a request body.
-      duplex: request.body ? "half" : undefined,
-    } as RequestInit & { duplex?: "half" });
+    });
 
     const responseHeaders = new Headers();
     for (const name of RESPONSE_HEADERS) {
@@ -99,7 +103,8 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
       statusText: upstream.statusText,
       headers: responseHeaders,
     });
-  } catch {
+  } catch (error) {
+    console.error("API proxy upstream error:", error);
     return proxyError(502, "API_UNREACHABLE", "The API service is unreachable");
   }
 }

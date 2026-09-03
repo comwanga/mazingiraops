@@ -212,6 +212,7 @@ export class StaffService {
     await this.wardAccessibleOrThrow(auth, existing.wardId);
 
     const data: Prisma.EmployeeUpdateInput = {};
+    if (input.employeeNumber !== undefined) data.employeeNumber = input.employeeNumber;
     if (input.fullName !== undefined) data.fullName = input.fullName;
     if (input.phone !== undefined) data.phone = normalizePhone(input.phone);
     if (input.email !== undefined) data.email = input.email;
@@ -224,30 +225,31 @@ export class StaffService {
     try {
       const employee = await this.prisma.client.$transaction(async (tx) => {
         const updated = await tx.employee.update({
-        where: { id },
-        data: {
-          ...data,
-          profile: {
-            upsert: {
-              create: {
-                residence: input.residence ?? null,
-                rosterStatus: input.rosterStatus ?? existing.profile?.rosterStatus ?? "ON_DUTY",
+          where: { id },
+          data: {
+            ...data,
+            profile: {
+              upsert: {
+                create: {
+                  residence: input.residence ?? null,
+                  rosterStatus: input.rosterStatus ?? existing.profile?.rosterStatus ?? "ON_DUTY",
+                },
+                update: profileData,
               },
-              update: profileData,
             },
           },
-        },
-        include: { profile: true, assignments: true, ward: true },
+          include: { profile: true, assignments: true, ward: true },
         });
         await this.audit.record({
-        action: "EMPLOYEE.UPDATED",
-        targetType: "Employee",
-        targetId: id,
-        scopeType: "WARD",
-        scopeId: updated.wardId,
-        actorUserId: auth.userId,
-        sourceIp: meta.sourceIp,
-        requestId: meta.requestId,
+          action: "EMPLOYEE.UPDATED",
+          targetType: "Employee",
+          targetId: id,
+          scopeType: "WARD",
+          scopeId: updated.wardId,
+          actorUserId: auth.userId,
+          sourceIp: meta.sourceIp,
+          requestId: meta.requestId,
+          details: input.employeeNumber ?? existing.employeeNumber,
         }, tx);
         return updated;
       });

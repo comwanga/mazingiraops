@@ -214,9 +214,10 @@ describe("staff management (integration)", () => {
       url: `/api/v1/staff/${employeeId}`,
       cookie: officer.cookie,
       csrf: officer.csrf,
-      payload: { fullName: "Updated Name", residence: "Makina", rosterStatus: "ANNUAL_LEAVE" },
+      payload: { employeeNumber: "20250100099", fullName: "Updated Name", residence: "Makina", rosterStatus: "ANNUAL_LEAVE" },
     });
     expect(updated.statusCode).toBe(200);
+    expect(updated.json().employeeNumber).toBe("20250100099");
     expect(updated.json().fullName).toBe("Updated Name");
     expect(updated.json().profile.residence).toBe("Makina");
     expect(updated.json().profile.rosterStatus).toBe("ANNUAL_LEAVE");

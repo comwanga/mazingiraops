@@ -134,6 +134,7 @@ export default function StaffPage() {
     setError(null);
     try {
       const updated = await updateStaff(editing.id, {
+        employeeNumber: editing.employeeNumber,
         fullName: editing.fullName,
         phone: editing.phone,
         email: editing.email?.trim() || null,
@@ -341,6 +342,7 @@ export default function StaffPage() {
             <button type="button" className="link-btn" onClick={() => setEditing(null)}>Close</button>
           </div>
           <form className="grid-form" onSubmit={onSaveEdit}>
+            <label>Payroll/Employee ID<input value={editing.employeeNumber} onChange={(event) => setEditing({ ...editing, employeeNumber: event.target.value.replace(/\D/g, "").slice(0, 11) })} placeholder="e.g. 20230228567" pattern="(19|20)\d{9}" maxLength={11} required /></label>
             <label>Full name<input value={editing.fullName} onChange={(event) => setEditing({ ...editing, fullName: event.target.value })} required /></label>
             <label>Phone<input type="tel" value={editing.phone} onChange={(event) => setEditing({ ...editing, phone: event.target.value })} required /></label>
             <label>Email <span className="optional">Optional</span><input type="email" value={editing.email ?? ""} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label>

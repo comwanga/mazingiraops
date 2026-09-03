@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { employeeNumberSchema, kenyanPhoneSchema } from "../src/common";
 import { createWorkLogSchema } from "../src/work-log";
 import { createAbsenceSchema } from "../src/absence";
-import { createEmployeeSchema, createEmployeeAssignmentSchema } from "../src/staff";
+import {
+  createEmployeeSchema,
+  createEmployeeAssignmentSchema,
+  updateEmployeeSchema,
+} from "../src/staff";
 import { reportQuerySchema } from "../src/report";
 import {
   createAttendanceSessionSchema,
@@ -161,6 +165,17 @@ describe("createEmployeeSchema", () => {
     expect(() =>
       createEmployeeSchema.parse({ ...base, phone: "12345" }),
     ).toThrow();
+  });
+});
+
+describe("updateEmployeeSchema", () => {
+  it("accepts a valid employee number update", () => {
+    const parsed = updateEmployeeSchema.parse({ employeeNumber: "20240126555" });
+    expect(parsed.employeeNumber).toBe("20240126555");
+  });
+
+  it("rejects an invalid employee number in update", () => {
+    expect(() => updateEmployeeSchema.parse({ employeeNumber: "invalid-id" })).toThrow();
   });
 });
 

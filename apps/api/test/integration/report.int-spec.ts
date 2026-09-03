@@ -1006,7 +1006,7 @@ describe("reports (integration)", () => {
     expect(draft.statusCode).toBe(201);
     const body = draft.json() as Record<string, any>;
     expect(body.narrativeSource).toBe("deterministic");
-    expect(body.narrative).toContain("1 approved work activities were recorded");
+    expect(body.narrative).toContain("1 work activities were recorded");
     expect(body.narrative).toContain("2 trips (Drainage desilting)");
     expect(body.recommendations).toContain("Sustain the completed activities");
     expect(body.snapshot.totals.PRESENT).toBe(1);

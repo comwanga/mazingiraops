@@ -739,8 +739,8 @@ export async function uploadAbsenceDocument(
   onProgress?: (percent: number) => void,
 ): Promise<AbsenceDocument> {
   const form = new FormData();
-  form.append("file", file);
   form.append("documentCategory", category);
+  form.append("file", file);
   return uploadWithProgress<AbsenceDocument>(
     `${API_URL}/absence-requests/${id}/documents`,
     form,
@@ -875,10 +875,10 @@ export async function uploadEvidence(
   onProgress?: (percent: number) => void,
 ): Promise<Evidence> {
   const form = new FormData();
-  form.append("file", file);
   form.append("workLogId", workLogId);
   form.append("stage", stage);
   form.append("caption", caption);
+  form.append("file", file);
   return uploadWithProgress<Evidence>(`${API_URL}/evidence`, form, onProgress);
 }
 

@@ -93,7 +93,7 @@ describe("report aggregation (§25, §26, ADR-0007)", () => {
         { activity: "Drainage desilting", numberOfTrips: 4 },
         { activity: "Street sweeping", numberOfTrips: 0 },
       ]);
-      expect(text).toContain("2 approved work activities were recorded");
+      expect(text).toContain("2 work activities were recorded");
       expect(text).toContain("3 present and 1 late entries");
       expect(text).toContain("2 absence entries");
       expect(text).toContain("Activities covered Drainage desilting, Street sweeping");
@@ -102,7 +102,7 @@ describe("report aggregation (§25, §26, ADR-0007)", () => {
 
     it("omits the activities and outputs sections when empty", () => {
       const text = deterministicNarrative(emptyTotals(), []);
-      expect(text).toContain("0 approved work activities were recorded");
+      expect(text).toContain("0 work activities were recorded");
       expect(text).not.toContain("Activities covered");
       expect(text).not.toContain("Recorded outputs included");
     });

@@ -429,13 +429,13 @@ describe("reports (integration)", () => {
     expect(snapshot.workLogs[0].photos).toHaveLength(1);
     expect(snapshot.workLogs[0].photos[0].evidenceId).toBe(evidenceId);
 
-    expect(body.narrative).toContain("1 approved work activities were recorded");
+    expect(body.narrative).toContain("1 work activities were recorded");
     expect(body.narrative).toContain("4 trips (Drainage desilting)");
     expect(body.recommendations).toContain("Sustain the completed activities");
     expect(body.title).toBe("Daily Operations Report — Makina");
   });
 
-  it("excludes non-approved work logs and weekend days without a session", async () => {
+  it("excludes rejected or draft work logs and weekend days without a session", async () => {
     const employeeId = await createEmployee("20250100100", "Present Staff", makinaWard.id);
     const session = await createSession(makinaWard.id, MONDAY);
     await createAttendance(employeeId, session.id, makinaWard.id, MONDAY, "PRESENT");
@@ -476,6 +476,51 @@ describe("reports (integration)", () => {
     });
     expect(preview.statusCode).toBe(200);
     expect(preview.json().snapshot.workLogs).toHaveLength(0);
+  });
+
+  it("automatically includes submitted work logs by ward officers in daily report", async () => {
+    const employeeId = await createEmployee("20250100100", "Present Staff", makinaWard.id);
+    const session = await createSession(makinaWard.id, MONDAY);
+    await createAttendance(employeeId, session.id, makinaWard.id, MONDAY, "PRESENT");
+
+    const submittedWorkLog = await prisma.workLog.create({
+      data: {
+        wardId: makinaWard.id,
+        workDate: new Date(`${MONDAY}T00:00:00.000Z`),
+        activity: "Road clearance and sweeping",
+        location: "Kibera Drive",
+        description: "Cleared road shoulders and drainage edges",
+        staffCount: 6,
+        status: "SUBMITTED",
+        submittedBy: "officer-user-id",
+        detail: { create: { completionStatus: "COMPLETE" } },
+        operations: {
+          create: {
+            areasRoads: "Kibera Drive",
+            numberOfTrips: 2,
+            wasteTransferInvolved: true,
+            truckId: "T-100",
+            backhoeId: null,
+            cleanupDone: false,
+            cleanupStakeholders: null,
+            climateTeamCount: 0,
+          },
+        },
+      },
+    });
+
+    const preview = await api(app, {
+      method: "GET",
+      url: `/api/v1/reports/preview?scopeType=WARD&scopeId=${makinaWard.id}&startDate=${MONDAY}&endDate=${MONDAY}&kind=DAILY`,
+      cookie: reviewer.cookie,
+    });
+    expect(preview.statusCode).toBe(200);
+    const body = preview.json();
+    expect(body.snapshot.workLogs).toHaveLength(1);
+    expect(body.snapshot.workLogs[0].id).toBe(submittedWorkLog.id);
+    expect(body.snapshot.workLogs[0].activity).toBe("Road clearance and sweeping");
+    expect(body.narrative).toContain("1 work activities were recorded");
+    expect(body.narrative).toContain("2 trips (Road clearance and sweeping)");
   });
 
   it("does not infer absences on weekdays with no attendance session", async () => {

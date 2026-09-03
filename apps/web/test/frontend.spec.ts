@@ -10,6 +10,7 @@ import {
   listAttendance,
   listSessions,
   listPublicOrganisations,
+  listReportsPage,
   listUsers,
   login,
   requestAccess,
@@ -32,7 +33,12 @@ import {
   createEvidenceFileSelection,
   evidenceUploadKey,
 } from "@/lib/work-log-evidence";
-import { buildAttendanceReportHref, buildDailyReportHref, readDailyReportPrefill } from "@/lib/report-navigation";
+import {
+  buildAttendanceReportHref,
+  buildDailyReportHref,
+  readDailyReportPrefill,
+  reportScopeOptionsForAssignments,
+} from "@/lib/report-navigation";
 
 describe("capability-aware navigation", () => {
   it("only exposes modules granted to the account", () => {
@@ -249,6 +255,79 @@ describe("work-log report handoff", () => {
       .toBeNull();
     expect(readDailyReportPrefill("?source=work-log&scopeType=WARD&scopeId=ward-1&kind=DAILY&startDate=not-a-date&endDate=2026-08-31"))
       .toBeNull();
+  });
+});
+
+describe("report history filters", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("requests finalized reports containing the selected reporting date", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      json: async () => [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listReportsPage({ date: "2026-09-03", kind: "DAILY", scopeId: "ward-makina" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/reports?scopeId=ward-makina&kind=DAILY&date=2026-09-03",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+});
+
+describe("report scope authorization", () => {
+  const hierarchy = [{
+    id: "county-nairobi",
+    name: "Nairobi",
+    subcounties: [{
+      id: "subcounty-kibra",
+      name: "Kibra",
+      wards: [
+        { id: "ward-makina", name: "Makina" },
+        { id: "ward-lindi", name: "Lindi" },
+      ],
+    }],
+  }];
+
+  it("only offers a ward officer their assigned ward", () => {
+    expect(reportScopeOptionsForAssignments(hierarchy, [{
+      scopeType: "WARD",
+      countyId: null,
+      subcountyId: null,
+      wardId: "ward-makina",
+    }])).toEqual([
+      { scopeType: "WARD", scopeId: "ward-makina", label: "Makina (Ward)" },
+    ]);
+  });
+
+  it("offers a sub-county officer their sub-county and its wards", () => {
+    expect(reportScopeOptionsForAssignments(hierarchy, [{
+      scopeType: "SUBCOUNTY",
+      countyId: null,
+      subcountyId: "subcounty-kibra",
+      wardId: null,
+    }]).map((option) => option.scopeId)).toEqual([
+      "subcounty-kibra",
+      "ward-makina",
+      "ward-lindi",
+    ]);
+  });
+
+  it("offers county-level management the full reporting hierarchy", () => {
+    expect(reportScopeOptionsForAssignments(hierarchy, [{
+      scopeType: "COUNTY",
+      countyId: "county-nairobi",
+      subcountyId: null,
+      wardId: null,
+    }]).map((option) => option.scopeId)).toEqual([
+      "county-nairobi",
+      "subcounty-kibra",
+      "ward-makina",
+      "ward-lindi",
+    ]);
   });
 });
 

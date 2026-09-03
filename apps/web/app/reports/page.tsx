@@ -9,7 +9,6 @@ import {
   ApiError,
   AuthUser,
   apiErrorMessage,
-  OrganisationCounty,
   Report,
   ReportKind,
   ReportPreview,
@@ -25,7 +24,11 @@ import {
   listReportsPage,
   previewReport,
 } from "@/lib/api";
-import { readDailyReportPrefill } from "@/lib/report-navigation";
+import {
+  readDailyReportPrefill,
+  ReportScopeOption,
+  reportScopeOptionsForAssignments,
+} from "@/lib/report-navigation";
 
 const KINDS: ReportKind[] = ["DAILY", "WEEKLY", "MONTHLY", "CUSTOM"];
 
@@ -46,37 +49,16 @@ function formatDate(value: string): string {
   });
 }
 
-interface ScopeOption {
-  scopeType: ReportScopeType;
-  scopeId: string;
-  label: string;
-}
-
-function flattenScopes(counties: OrganisationCounty[]): ScopeOption[] {
-  const options: ScopeOption[] = [];
-  for (const county of counties) {
-    options.push({ scopeType: "COUNTY", scopeId: county.id, label: `${county.name} (County)` });
-    for (const subcounty of county.subcounties) {
-      options.push({
-        scopeType: "SUBCOUNTY",
-        scopeId: subcounty.id,
-        label: `${subcounty.name} (Subcounty)`,
-      });
-      for (const ward of subcounty.wards) {
-        options.push({ scopeType: "WARD", scopeId: ward.id, label: `${ward.name} (Ward)` });
-      }
-    }
-  }
-  return options;
-}
-
 export default function ReportsPage() {
   const router = useRouter();
   const [me, setMe] = useState<(AuthUser & { capabilities: string[] }) | null>(null);
-  const [scopes, setScopes] = useState<ScopeOption[]>([]);
+  const [scopes, setScopes] = useState<ReportScopeOption[]>([]);
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [reportPage, setReportPage] = useState(1);
   const [reportTotal, setReportTotal] = useState(0);
+  const [historyDate, setHistoryDate] = useState("");
+  const [historyScopeId, setHistoryScopeId] = useState("");
+  const [historyKind, setHistoryKind] = useState<"" | ReportKind>("");
   const [selected, setSelected] = useState<Report | null>(null);
   const [preview, setPreview] = useState<ReportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +96,7 @@ export default function ReportsPage() {
         return;
       }
       const counties = await fetchOrganisationTree();
-      const options = flattenScopes(counties);
+      const options = reportScopeOptionsForAssignments(counties, current.assignments);
       setScopes(options);
       const prefill = reportPrefillHandled.current
         ? null
@@ -166,7 +148,13 @@ export default function ReportsPage() {
           scopeId: currentForm.scopeId || options[0]?.scopeId || "",
         }));
       }
-      const archive = await listReportsPage({ page: reportPage, pageSize: 25 });
+      const archive = await listReportsPage({
+        page: reportPage,
+        pageSize: 25,
+        date: historyDate || undefined,
+        scopeId: historyScopeId || undefined,
+        kind: historyKind || undefined,
+      });
       setReports(archive.items);
       setReportTotal(archive.total);
     } catch (err) {
@@ -178,7 +166,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [reportPage, router]);
+  }, [historyDate, historyKind, historyScopeId, reportPage, router]);
 
   useEffect(() => {
     void load();
@@ -224,7 +212,13 @@ export default function ReportsPage() {
       setNotice(`Finalized ${created.title}.`);
       setSelected(created);
       setReportPage(1);
-      const archive = await listReportsPage({ page: 1, pageSize: 25 });
+      const archive = await listReportsPage({
+        page: 1,
+        pageSize: 25,
+        date: historyDate || undefined,
+        scopeId: historyScopeId || undefined,
+        kind: historyKind || undefined,
+      });
       setReports(archive.items);
       setReportTotal(archive.total);
     } catch (err) {
@@ -269,7 +263,7 @@ export default function ReportsPage() {
     }
   }
 
-  async function onCsv(report: ReportSummary) {
+  async function onCsv(report: Pick<ReportSummary, "id" | "kind" | "periodStart">) {
     setError(null);
     try {
       const blob = await downloadReportCsv(report.id);
@@ -326,6 +320,7 @@ export default function ReportsPage() {
             <select
               value={form.scopeId}
               onChange={(e) => { setForm({ ...form, scopeId: e.target.value }); setPreview(null); setSelected(null); }}
+              disabled={scopes.length === 1}
               required
             >
               <option value="">Select scope…</option>
@@ -539,9 +534,16 @@ export default function ReportsPage() {
       )}
 
       <section className="panel">
-        <h2>Finalized reports</h2>
+        <h2>Report history</h2>
+        <p className="muted-text">Finalized reports and daily attendance snapshots remain available by reporting date and authorized area.</p>
+        <div className="filter-row">
+          <label>Reporting date<input type="date" value={historyDate} onChange={(event) => { setHistoryDate(event.target.value); setReportPage(1); }} /></label>
+          <label>Scope<select value={historyScopeId} onChange={(event) => { setHistoryScopeId(event.target.value); setReportPage(1); }}><option value="">All authorized areas</option>{scopes.map((option) => <option key={`${option.scopeType}-${option.scopeId}`} value={option.scopeId}>{option.label}</option>)}</select></label>
+          <label>Report type<select value={historyKind} onChange={(event) => { setHistoryKind(event.target.value as "" | ReportKind); setReportPage(1); }}><option value="">All report types</option>{KINDS.map((kind) => <option key={kind} value={kind}>{kind.charAt(0) + kind.slice(1).toLowerCase()}</option>)}</select></label>
+          {(historyDate || historyScopeId || historyKind) && <button type="button" className="secondary-btn" onClick={() => { setHistoryDate(""); setHistoryScopeId(""); setHistoryKind(""); setReportPage(1); }}>Clear filters</button>}
+        </div>
         {reports.length === 0 ? (!loading && (
-          <p className="empty">No finalized reports yet.</p>
+          <p className="empty">No finalized reports match these filters.</p>
         )) : (
           <div className="table-wrap"><table className="data-table">
             <thead>
@@ -549,6 +551,8 @@ export default function ReportsPage() {
                 <th>Title</th>
                 <th>Period</th>
                 <th>Kind</th>
+                <th>Scope</th>
+                <th>Authorized by</th>
                 <th>Finalized</th>
                 <th></th>
               </tr>
@@ -561,6 +565,8 @@ export default function ReportsPage() {
                     {formatDate(report.periodStart)} to {formatDate(report.periodEnd)}
                   </td>
                   <td>{report.kind.toLowerCase()}</td>
+                  <td>{report.scopeName ?? report.scopeType.toLowerCase()}</td>
+                  <td>{report.signedBy ? <>{report.signedBy}<br /><span className="muted-text">{report.signedTitle}</span></> : "—"}</td>
                   <td>{report.finalizedAt ? formatDate(report.finalizedAt.slice(0, 10)) : "—"}</td>
                   <td>
                     <div className="doc-actions">

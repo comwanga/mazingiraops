@@ -214,11 +214,22 @@ describe("staff management (integration)", () => {
       url: `/api/v1/staff/${employeeId}`,
       cookie: officer.cookie,
       csrf: officer.csrf,
-      payload: { fullName: "Updated Name", residence: "Makina" },
+      payload: { fullName: "Updated Name", residence: "Makina", rosterStatus: "ANNUAL_LEAVE" },
     });
     expect(updated.statusCode).toBe(200);
     expect(updated.json().fullName).toBe("Updated Name");
     expect(updated.json().profile.residence).toBe("Makina");
+    expect(updated.json().profile.rosterStatus).toBe("ANNUAL_LEAVE");
+
+    const returned = await api(app, {
+      method: "PATCH",
+      url: `/api/v1/staff/${employeeId}`,
+      cookie: officer.cookie,
+      csrf: officer.csrf,
+      payload: { rosterStatus: "ON_DUTY" },
+    });
+    expect(returned.statusCode).toBe(200);
+    expect(returned.json().profile.rosterStatus).toBe("ON_DUTY");
 
     const deactivated = await api(app, {
       method: "POST",

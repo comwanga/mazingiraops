@@ -276,7 +276,7 @@ describe("reports (integration)", () => {
     expect(list.statusCode).toBe(401);
   });
 
-  it("requires REPORTS_FINALIZE to finalize a report", async () => {
+  it("lets a ward officer archive their ward report but still requires REPORTS_FINALIZE", async () => {
     await createEmployee("20250100100", "Present Staff", makinaWard.id);
 
     const payload = {
@@ -286,23 +286,24 @@ describe("reports (integration)", () => {
       endDate: MONDAY,
       kind: "DAILY",
     };
-    const denied = await api(app, {
+    const wardReport = await api(app, {
       method: "POST",
       url: "/api/v1/reports",
       cookie: officer.cookie,
       csrf: officer.csrf,
       payload,
     });
-    expect(denied.statusCode).toBe(403);
+    expect(wardReport.statusCode).toBe(201);
+    expect(wardReport.json().snapshot.signedTitle).toBe("Ward Environment Officer");
 
-    const allowed = await api(app, {
+    const denied = await api(app, {
       method: "POST",
       url: "/api/v1/reports",
-      cookie: reviewer.cookie,
-      csrf: reviewer.csrf,
+      cookie: readOnly.cookie,
+      csrf: readOnly.csrf,
       payload,
     });
-    expect(allowed.statusCode).toBe(201);
+    expect(denied.statusCode).toBe(403);
   });
 
   it("blocks finalization while an attendance session is still active", async () => {

@@ -73,6 +73,7 @@ export const reportQuerySchema = z.object({
   scopeType: scopeTypeSchema.optional(),
   scopeId: idSchema.optional(),
   kind: reportKindSchema.optional(),
+  date: isoDateSchema.optional(),
   ...paginationSchema.shape,
 });
 

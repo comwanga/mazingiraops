@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -45,8 +45,10 @@ export default function StaffPage() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Employee | null>(null);
+  const editDialogRef = useRef<HTMLDialogElement>(null);
   const [assignmentWard, setAssignmentWard] = useState("");
   const [assignmentType, setAssignmentType] = useState<"TEMPORARY" | "TRANSFER">("TEMPORARY");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -97,6 +99,13 @@ export default function StaffPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const dialog = editDialogRef.current;
+    if (!dialog) return;
+    if (editing && !dialog.open) dialog.showModal();
+    if (!editing && dialog.open) dialog.close();
+  }, [editing]);
 
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -236,12 +245,18 @@ export default function StaffPage() {
   }
 
   const query = search.trim().toLowerCase();
-  const filtered = employees.filter((employee) =>
-    [employee.fullName, employee.employeeNumber, employee.phone, employee.email ?? "", employee.ward.name]
-      .join(" ")
-      .toLowerCase()
-      .includes(query),
-  );
+  const filtered = employees.filter((employee) => {
+    const rosterStatus = employee.active
+      ? employee.profile?.rosterStatus ?? "ON_DUTY"
+      : "INACTIVE";
+    return (
+      (statusFilter === "ALL" || rosterStatus === statusFilter) &&
+      [employee.fullName, employee.employeeNumber, employee.phone, employee.email ?? "", employee.ward.name]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  });
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -313,8 +328,14 @@ export default function StaffPage() {
         </section>
       )}
 
-      {editing && (
-        <section className="panel" aria-labelledby="edit-staff-title">
+      <dialog
+        ref={editDialogRef}
+        className="app-dialog staff-edit-dialog"
+        aria-labelledby="edit-staff-title"
+        onCancel={(event) => { event.preventDefault(); setEditing(null); }}
+        onClose={() => setEditing(null)}
+      >
+        {editing && <>
           <div className="panel-heading">
             <h2 id="edit-staff-title">Edit {editing.fullName}</h2>
             <button type="button" className="link-btn" onClick={() => setEditing(null)}>Close</button>
@@ -334,8 +355,8 @@ export default function StaffPage() {
             <button type="button" className="secondary-btn" disabled={!assignmentWard || submitting} onClick={() => void onAssign()}>{assignmentType === "TRANSFER" ? "Transfer" : "Add assignment"}</button>
           </div>
           {editing.assignments.length > 0 && <div className="active-assignments"><strong>Temporary assignments</strong>{editing.assignments.map((assignment) => <span key={assignment.id}>{wards.find((ward) => ward.id === assignment.wardId)?.name ?? assignment.wardId}<button type="button" className="danger-link" disabled={submitting} onClick={() => void onEndAssignment(assignment.id)}>End</button></span>)}</div>}
-        </section>
-      )}
+        </>}
+      </dialog>
 
       <section className="panel">
         <div className="panel-heading">
@@ -345,10 +366,13 @@ export default function StaffPage() {
             <input type="search" value={search} placeholder="Search staff" onChange={(event) => { setSearch(event.target.value); setPage(1); }} />
           </label>
         </div>
+        <div className="filter-row">
+          <label>Status<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="ALL">All statuses</option><option value="ON_DUTY">On duty</option><option value="ANNUAL_LEAVE">Annual leave</option><option value="INACTIVE">Inactive</option></select></label>
+        </div>
         {visible.length === 0 ? (!loading && <p className="empty">No staff match this search.</p>) : (
           <div className="table-wrap">
             <table className="data-table">
-              <thead><tr><th>Number</th><th>Name</th><th>Contact</th><th>Ward</th><th>Designation</th><th>Status</th>{canManage && <th>Actions</th>}</tr></thead>
+              <thead><tr><th>Number</th><th>Name</th><th>Contact</th><th>Ward</th><th>Designation</th><th>Roster status</th>{canManage && <th>Actions</th>}</tr></thead>
               <tbody>{visible.map((employee) => (
                 <tr key={employee.id}>
                   <td>{employee.employeeNumber}</td>
@@ -356,7 +380,7 @@ export default function StaffPage() {
                   <td>{employee.phone}{employee.email && <><br /><span className="muted-text">{employee.email}</span></>}</td>
                   <td>{employee.ward.code}{employee.assignments.length > 0 && <span className="muted-text"> +{employee.assignments.length}</span>}</td>
                   <td>{employee.designation}</td>
-                  <td><span className={`badge ${employee.active ? "ok" : "muted"}`}>{employee.active ? "Active" : "Inactive"}</span></td>
+                  <td><span className={`badge ${!employee.active ? "muted" : employee.profile?.rosterStatus === "ANNUAL_LEAVE" ? "leave" : "ok"}`}>{!employee.active ? "Inactive" : employee.profile?.rosterStatus === "ANNUAL_LEAVE" ? "Annual leave" : "On duty"}</span></td>
                   {canManage && <td><div className="doc-actions"><button type="button" className="link-btn" onClick={() => { setEditing(employee); setAssignmentWard(""); }}>Edit</button><button type="button" className={employee.active ? "danger-link" : "link-btn"} onClick={() => setConfirmEmployee(employee)}>{employee.active ? "Deactivate" : "Reactivate"}</button></div></td>}
                 </tr>
               ))}</tbody>

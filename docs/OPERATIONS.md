@@ -14,11 +14,11 @@
 
 Open Reports, choose the period and preview it. Daily reports contain all attached field photos. Weekly and monthly reports contain a balanced sample of up to four before, four during and four after photos from the period. Reports also include recommendations, the owner's full name, and generation date/time. Finalised reports are immutable archived snapshots for appraisal and future reference.
 
-Use **Attendance history** to select any calendar date, review check-in times and statuses, generate that day's staff report, or reopen an already archived daily report.
+Use the date and status filters in **Daily attendance register** to review check-ins, absentees, leave, sick-off, and other statuses. After the register closes, generate and finalize the daily report; its immutable attendance snapshot remains in **Report history**, where it can be reopened by reporting date and authorized area.
 
 ## Staff roster
 
-Upload the official Excel list under **Staff register**. The Employee ID must be 11 digits and start with the four-digit year, for example `20230464669`. Staff check in with the exact Employee ID saved in the register; phone numbers are not used for check-in verification. Existing IDs are updated. Correct typing errors with **Edit** and use **Deactivate** rather than deleting former staff. Imported annual leave affects the current daily tally until the record is changed back to on duty or a newer roster is uploaded.
+Upload the official Excel list under **Staff register**. The Employee ID must be 11 digits and start with the four-digit year, for example `20230464669`. Staff check in with the exact Employee ID saved in the register; phone numbers are not used for check-in verification. Existing IDs are updated. Correct typing errors or change a returning employee from **Annual leave** to **On duty** with **Edit**, and use **Deactivate** rather than deleting former staff.
 
 ## User access
 

@@ -463,6 +463,12 @@ export class ReportService {
         ...(query.scopeType ? [{ scopeType: query.scopeType }] : []),
         ...(query.scopeId ? [{ scopeId: query.scopeId }] : []),
         ...(query.kind ? [{ kind: query.kind }] : []),
+        ...(query.date
+          ? [{
+              periodStart: { lte: fromDateString(query.date) },
+              periodEnd: { gte: fromDateString(query.date) },
+            }]
+          : []),
       ],
     };
     const [total, reports] = await this.prisma.client.$transaction([
@@ -481,6 +487,7 @@ export class ReportService {
           periodEnd: true,
           status: true,
           title: true,
+          snapshot: true,
           version: true,
           finalizedBy: true,
           finalizedAt: true,
@@ -491,6 +498,14 @@ export class ReportService {
     ]);
     return {
       items: reports.map((report) => ({
+        ...(() => {
+          const snapshot = report.snapshot as unknown as ReportSnapshot;
+          return {
+            signedBy: snapshot.signedBy ?? null,
+            signedTitle: snapshot.signedTitle ?? null,
+            scopeName: snapshot.scopeName ?? null,
+          };
+        })(),
         id: report.id,
         kind: report.kind,
         scopeType: report.scopeType,

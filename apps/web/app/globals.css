@@ -1622,6 +1622,16 @@ button:disabled,
   min-width: 180px;
 }
 
+.staff-edit-dialog {
+  width: min(900px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.staff-edit-dialog .grid-form {
+  margin-bottom: 1rem;
+}
+
 .pagination {
   justify-content: flex-end;
   align-items: center;

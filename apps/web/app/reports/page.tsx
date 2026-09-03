@@ -484,9 +484,9 @@ export default function ReportsPage() {
               </tbody>
             </table></div>
           )}
-          <h3>Approved work</h3>
+          <h3>Work operations</h3>
           {snapshot.workLogs.length === 0 ? (
-            <p className="empty">No approved work logs in this period.</p>
+            <p className="empty">No work logs in this period.</p>
           ) : (
             <div className="table-wrap"><table className="data-table">
               <thead>

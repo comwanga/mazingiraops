@@ -188,7 +188,8 @@ export interface ReportSnapshot {
   signedBy: string | null;
   signedTitle: string | null;
   totals: Record<AttendanceStatus, number>;
-  analytics: ReportAnalytics;
+  // analytics is absent on pre-v2 (SNAPSHOT_VERSION < 2) snapshots
+  analytics?: ReportAnalytics;
   comparison: ReportComparison | null;
   days: ReportDay[];
   workLogs: ReportWorkLog[];
@@ -200,6 +201,63 @@ export interface ReportSnapshot {
 
 export function toDateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
+}
+
+/**
+ * Build a minimal ReportAnalytics from a pre-v2 (SNAPSHOT_VERSION < 2) snapshot
+ * that lacks an `analytics` field. Uses the stored `totals` and `workLogs` so that
+ * the PDF renderer can produce a degraded-but-safe output instead of crashing.
+ */
+export function buildFallbackAnalytics(snapshot: ReportSnapshot): ReportAnalytics {
+  // snapshot.totals is typed as Record<AttendanceStatus, number> at runtime (v1 schema),
+  // but we cast to Partial so individual keys can be absent.
+  const totals: Partial<Record<string, number>> = snapshot.totals as unknown as Partial<Record<string, number>>;
+  const get = (k: string): number => totals[k] ?? 0;
+  const attended = get("PRESENT") + get("LATE") + get("HALF_DAY");
+  const rostered: number = Object.values(totals).reduce<number>((s, v) => s + (v ?? 0), 0);
+  const excused = get("ANNUAL_LEAVE") + get("SICK_LEAVE") + get("MATERNITY_LEAVE");
+  const expected = rostered - excused;
+  const effectiveRate = expected > 0 ? roundTo((attended / expected) * 100) : 0;
+
+  const statusDistribution: Record<string, { count: number; percentage: number }> = {};
+  for (const [k, v] of Object.entries(totals)) {
+    const count = v ?? 0;
+    statusDistribution[k] = { count, percentage: rostered > 0 ? roundTo((count / rostered) * 100) : 0 };
+  }
+
+  const trips = snapshot.workLogs.reduce<number>((s, w) => s + (w.numberOfTrips ?? 0), 0);
+  const complete = snapshot.workLogs.filter((w) => w.completionStatus === "COMPLETE" || w.cleanupDone).length;
+  const completionRate = snapshot.workLogs.length > 0 ? roundTo((complete / snapshot.workLogs.length) * 100) : 0;
+
+  return {
+    analyticsVersion: "0.0-fallback",
+    totalRostered: rostered,
+    expectedOnDuty: expected,
+    excusedCount: excused,
+    attendedCount: attended,
+    effectiveAttendanceRate: effectiveRate,
+    operationalAvailabilityRate: effectiveRate,
+    uniquePersonnelAttended: attended,
+    totalStaffAllocations: snapshot.workLogs.reduce<number>((s, w) => s + (w.staffCount ?? 0), 0),
+    statusDistribution: statusDistribution as Record<string, { count: number; percentage: number }> as any,
+    dailyTrend: [],
+    totalWorkLogs: snapshot.workLogs.length,
+    distinctActivitiesCount: new Set(snapshot.workLogs.map((w) => w.activity)).size,
+    totalTrips: trips,
+    completeCount: complete,
+    incompleteCount: snapshot.workLogs.length - complete,
+    completionRate,
+    outstandingWorkCount: snapshot.workLogs.filter((w) => w.outstandingWork).length,
+    activityBreakdown: [],
+    operations: {
+      wasteTransferLogsCount: snapshot.workLogs.filter((w) => w.wasteTransferInvolved).length,
+      cleanupLogsCount: snapshot.workLogs.filter((w) => w.cleanupDone).length,
+      climateTeamTotal: snapshot.workLogs.reduce<number>((s, w) => s + (w.climateTeamCount ?? 0), 0),
+      trucksUsed: [...new Set(snapshot.workLogs.filter((w) => w.truckId).map((w) => w.truckId!))],
+      backhoesUsed: [...new Set(snapshot.workLogs.filter((w) => w.backhoeId).map((w) => w.backhoeId!))],
+    },
+    constituentComparisons: [],
+  };
 }
 
 export function fromDateString(value: string): Date {

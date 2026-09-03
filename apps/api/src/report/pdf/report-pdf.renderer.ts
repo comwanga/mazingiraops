@@ -5,7 +5,7 @@ import type {
   ReportPhotoRef,
   ReportSnapshot,
 } from "../report-aggregation";
-import { canonicalSnapshotHash, RENDERER_VERSION } from "../report-aggregation";
+import { buildFallbackAnalytics, canonicalSnapshotHash, RENDERER_VERSION } from "../report-aggregation";
 
 export type ImageLoader = (objectKey: string) => Promise<Buffer | null>;
 
@@ -88,11 +88,16 @@ export async function renderReportPdf(
   const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right; // 595.28 - 80 = 515.28 pt
   const bottomThreshold = doc.page.height - doc.page.margins.bottom;
 
+  // Resolve analytics: pre-v2 snapshots (snapshotVersion < 2) lack this field.
+  // Build a degraded-but-safe fallback from stored totals/workLogs so the renderer never crashes.
+  const analytics = snapshot.analytics ?? buildFallbackAnalytics(snapshot);
+
   function ensureSpace(requiredHeight: number) {
     if (doc.y + requiredHeight > bottomThreshold) {
       doc.addPage();
     }
   }
+
 
   // -------------------------------------------------------------------------
   // 1. Header & Official Branding
@@ -166,7 +171,6 @@ export async function renderReportPdf(
   // -------------------------------------------------------------------------
   function renderExecutiveSummary() {
     ensureSpace(120);
-    const analytics = snapshot.analytics;
     const comparison = snapshot.comparison;
 
     doc
@@ -276,7 +280,6 @@ export async function renderReportPdf(
   // -------------------------------------------------------------------------
   function renderAttendanceAnalytics() {
     ensureSpace(170);
-    const analytics = snapshot.analytics;
 
     doc
       .fontSize(11)
@@ -755,7 +758,7 @@ export async function renderReportPdf(
   // 6. Constituent Comparisons (Subcounty / County scopes)
   // -------------------------------------------------------------------------
   function renderConstituentComparisons() {
-    const comparisons = snapshot.analytics.constituentComparisons;
+    const comparisons = analytics.constituentComparisons;
     if (!comparisons || comparisons.length <= 1) return;
 
     ensureSpace(120);

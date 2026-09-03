@@ -336,7 +336,7 @@ export class ReportService {
     const workLogs = await this.prisma.client.workLog.findMany({
       where: {
         wardId: { in: wardIds },
-        status: "APPROVED",
+        status: { in: ["SUBMITTED", "APPROVED"] },
         workDate: { gte: start, lte: end },
       },
       include: {

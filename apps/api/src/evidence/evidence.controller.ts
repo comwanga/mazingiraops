@@ -22,35 +22,37 @@ export class EvidenceController {
     if (!request.isMultipart()) {
       throw new BadRequestException("Expected a multipart photo upload");
     }
-    const file = await request.file();
-    if (!file) {
+    let fileBuffer: Buffer | undefined;
+    let filename = "";
+    let mimetype = "";
+    let workLogId = "";
+    let stage = "";
+    let caption = "";
+
+    for await (const part of request.parts()) {
+      if (part.type === "file") {
+        if (fileBuffer) {
+          throw new BadRequestException("Supply exactly one photo");
+        }
+        filename = part.filename;
+        mimetype = part.mimetype;
+        fileBuffer = await part.toBuffer();
+      } else {
+        if (part.fieldname === "workLogId") workLogId = String(part.value);
+        if (part.fieldname === "stage") stage = String(part.value);
+        if (part.fieldname === "caption") caption = String(part.value);
+      }
+    }
+
+    if (!fileBuffer) {
       throw new BadRequestException("No photo supplied");
     }
-    const stageField = file.fields?.["stage"];
-    const rawStage = Array.isArray(stageField) ? stageField[0] : stageField;
-    const rawStageValue =
-      rawStage && typeof rawStage === "object" && "value" in rawStage
-        ? String((rawStage as { value: unknown }).value)
-        : String(rawStage ?? "");
-    const workLogField = file.fields?.["workLogId"];
-    const rawWorkLog = Array.isArray(workLogField) ? workLogField[0] : workLogField;
-    const workLogId =
-      rawWorkLog && typeof rawWorkLog === "object" && "value" in rawWorkLog
-        ? String((rawWorkLog as { value: unknown }).value)
-        : String(rawWorkLog ?? "");
-    const captionField = file.fields?.["caption"];
-    const rawCaption = Array.isArray(captionField) ? captionField[0] : captionField;
-    const caption =
-      rawCaption && typeof rawCaption === "object" && "value" in rawCaption
-        ? String((rawCaption as { value: unknown }).value)
-        : String(rawCaption ?? "");
 
-    const metaInput = evidenceMetaSchema.parse({ stage: rawStageValue, caption });
-    const buffer = await file.toBuffer();
+    const metaInput = evidenceMetaSchema.parse({ stage, caption });
     return this.evidence.upload(
       auth!,
       workLogId,
-      { buffer, originalName: file.filename, contentType: file.mimetype },
+      { buffer: fileBuffer, originalName: filename, contentType: mimetype },
       metaInput.stage,
       metaInput.caption,
       meta(request),

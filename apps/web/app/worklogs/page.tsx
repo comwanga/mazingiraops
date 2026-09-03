@@ -290,8 +290,7 @@ export default function WorkLogsPage() {
             {submissionSuccess.photoCount} selected {submissionSuccess.photoCount === 1 ? "photo was" : "photos were"} uploaded.
           </p>
           <p className="muted-text">
-            The daily report preview includes the day&apos;s staff attendance. This work entry will appear in
-            the final report after its authorized review and approval.
+            The daily report preview automatically includes this work entry and the day&apos;s staff attendance.
           </p>
           <div className="worklog-success-actions">
             <button type="button" onClick={() => router.push(submissionSuccess.reportHref)}>

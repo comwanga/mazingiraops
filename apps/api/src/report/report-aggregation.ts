@@ -191,7 +191,7 @@ export function deterministicNarrative(
     .filter((item) => (item.numberOfTrips ?? 0) > 0)
     .map((item) => `${item.numberOfTrips} trips (${item.activity})`);
   let text =
-    `During the reporting period, ${workLogs.length} approved work activities were recorded. ` +
+    `During the reporting period, ${workLogs.length} work activities were recorded. ` +
     `Attendance records contained ${totals.PRESENT ?? 0} present and ${totals.LATE ?? 0} late entries, ` +
     `with ${totals.ABSENT ?? 0} absence entries requiring or having received follow-up.`;
   if (activities.length) text += ` Activities covered ${activities.join(", ")}.`;

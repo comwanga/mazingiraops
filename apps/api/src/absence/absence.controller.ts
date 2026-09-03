@@ -81,27 +81,38 @@ export class AbsenceController {
     if (!request.isMultipart()) {
       throw new BadRequestException("Expected a multipart file upload");
     }
-    const file = await request.file();
-    if (!file) {
+    let fileBuffer: Buffer | undefined;
+    let filename = "";
+    let mimetype = "";
+    let category = "OTHER";
+
+    for await (const part of request.parts()) {
+      if (part.type === "file") {
+        if (fileBuffer) {
+          throw new BadRequestException("Supply exactly one file");
+        }
+        filename = part.filename;
+        mimetype = part.mimetype;
+        fileBuffer = await part.toBuffer();
+      } else if (part.fieldname === "documentCategory") {
+        category = String(part.value);
+      }
+    }
+
+    if (!fileBuffer) {
       throw new BadRequestException("No document file supplied");
     }
-    const field = file.fields?.["documentCategory"];
-    const rawField = Array.isArray(field) ? field[0] : field;
-    const rawCategory =
-      rawField && typeof rawField === "object" && "value" in rawField
-        ? String((rawField as { value: unknown }).value)
-        : String(rawField ?? "OTHER");
-    const category = documentCategorySchema.parse(rawCategory);
-    const buffer = await file.toBuffer();
+
+    const parsedCategory = documentCategorySchema.parse(category);
     return this.absence.uploadDocument(
       auth!,
       id,
       {
-        buffer,
-        originalName: file.filename,
-        contentType: file.mimetype,
+        buffer: fileBuffer,
+        originalName: filename,
+        contentType: mimetype,
       },
-      category,
+      parsedCategory,
       meta(request),
     );
   }

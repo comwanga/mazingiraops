@@ -159,6 +159,16 @@ enum DeliveryStatus {
   FAILED
 }
 
+enum ArtifactKind {
+  PDF
+}
+
+enum ArtifactStatus {
+  GENERATING
+  READY
+  FAILED
+}
+
 enum RosterStatus {
   ON_DUTY
   ANNUAL_LEAVE
@@ -586,9 +596,30 @@ model Report {
   createdBy       String
   createdAt       DateTime         @default(now())
   evidence        ReportEvidence[]
+  artifacts       ReportArtifact[]
 
   @@index([scopeType, scopeId, periodStart, periodEnd])
   @@index([kind])
+}
+
+model ReportArtifact {
+  id              String         @id @default(cuid())
+  reportId        String
+  kind            ArtifactKind   @default(PDF)
+  status          ArtifactStatus @default(GENERATING)
+  objectKey       String?        @unique
+  sha256          String?
+  contentType     String         @default("application/pdf")
+  size            Int?
+  failureReason   String?
+  generatedAt     DateTime?
+  rendererVersion String         @default("1.0")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  report          Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, kind])
+  @@index([reportId])
 }
 
 model ReportEvidence {

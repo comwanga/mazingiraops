@@ -16,6 +16,7 @@ import {
   ReportSummary,
   downloadReportEvidence,
   downloadReportCsv,
+  downloadReportPdf,
   draftReportNarrative,
   fetchMe,
   fetchOrganisationTree,
@@ -23,6 +24,7 @@ import {
   finalizeReport,
   listReportsPage,
   previewReport,
+  reportPdfUrl,
 } from "@/lib/api";
 import {
   readDailyReportPrefill,
@@ -66,6 +68,7 @@ export default function ReportsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [conflictReportId, setConflictReportId] = useState<string | null>(null);
   const reportPrefillHandled = useRef(false);
   const [form, setForm] = useState({
     scopeId: "",
@@ -202,6 +205,7 @@ export default function ReportsPage() {
   async function onFinalize() {
     setError(null);
     setNotice(null);
+    setConflictReportId(null);
     setSubmitting(true);
     try {
       const created = await finalizeReport({
@@ -222,6 +226,9 @@ export default function ReportsPage() {
       setReports(archive.items);
       setReportTotal(archive.total);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.existingReportId) {
+        setConflictReportId(err.existingReportId);
+      }
       setError(apiErrorMessage(err, "Unable to finalize report"));
     } finally {
       setSubmitting(false);
@@ -254,12 +261,38 @@ export default function ReportsPage() {
 
   async function onOpen(report: ReportSummary) {
     setError(null);
+    setConflictReportId(null);
     try {
       const opened = await fetchReport(report.id);
       setPreview(null);
       setSelected(opened);
     } catch (err) {
       setError(apiErrorMessage(err, "Unable to open report"));
+    }
+  }
+
+  async function onOpenById(id: string) {
+    setError(null);
+    setConflictReportId(null);
+    try {
+      const opened = await fetchReport(id);
+      setPreview(null);
+      setSelected(opened);
+    } catch (err) {
+      setError(apiErrorMessage(err, "Unable to open report"));
+    }
+  }
+
+  async function onDownloadPdf(report: Pick<ReportSummary, "id" | "kind" | "periodStart">) {
+    setError(null);
+    try {
+      const blob = await downloadReportPdf(report.id);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `mazingira-${report.kind.toLowerCase()}-${report.periodStart}.pdf`;
+      link.click();
+    } catch (err) {
+      setError(apiErrorMessage(err, "Unable to download report PDF"));
     }
   }
 
@@ -311,6 +344,27 @@ export default function ReportsPage() {
       </header>
 
       <StatusMessages error={error} notice={notice} loading={loading ? "Loading reports..." : null} />
+      {conflictReportId && (
+        <div
+          className="panel"
+          style={{
+            borderLeft: "4px solid var(--color-warning, #b45309)",
+            padding: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <p style={{ margin: "0 0 0.5rem 0", fontWeight: 600 }}>
+            A finalized report already exists for this scope and reporting period.
+          </p>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => void onOpenById(conflictReportId)}
+          >
+            Open existing report
+          </button>
+        </div>
+      )}
 
       {can("REPORTS_GENERATE") && <section className="panel">
         <h2>Build a report</h2>
@@ -439,8 +493,20 @@ export default function ReportsPage() {
             >
               Back
             </button>
-            <button type="button" className="link-btn" onClick={() => window.print()}>
-              Print / PDF
+            <a
+              className="link-btn"
+              href={reportPdfUrl(selected.id, "inline")}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View PDF
+            </a>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => void onDownloadPdf(selected)}
+            >
+              Download PDF
             </button>
             {canExport && (
               <button type="button" className="link-btn" onClick={() => void onCsv(selected)}>
@@ -505,7 +571,14 @@ export default function ReportsPage() {
                     <td>{formatDate(workLog.date)}</td>
                     <td>{workLog.wardName}</td>
                     <td>{workLog.activity}</td>
-                    <td>{workLog.location}</td>
+                    <td>
+                      {workLog.location}
+                      {workLog.suggestedSolutions && (
+                        <div style={{ fontSize: "0.8em", color: "var(--color-text-muted)" }}>
+                          <strong>Suggested solution:</strong> {workLog.suggestedSolutions}
+                        </div>
+                      )}
+                    </td>
                     <td>{workLog.numberOfTrips}</td>
                     <td>
                       {workLog.photos.length === 0 ? (
@@ -570,6 +643,21 @@ export default function ReportsPage() {
                   <td>{report.finalizedAt ? formatDate(report.finalizedAt.slice(0, 10)) : "—"}</td>
                   <td>
                     <div className="doc-actions">
+                      <a
+                        className="link-btn"
+                        href={reportPdfUrl(report.id, "inline")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        View PDF
+                      </a>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => void onDownloadPdf(report)}
+                      >
+                        Download PDF
+                      </button>
                       <button type="button" className="link-btn" onClick={() => void onOpen(report)}>
                         View
                       </button>

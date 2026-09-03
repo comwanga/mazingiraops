@@ -138,6 +138,12 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 export const DELIVERY_STATUSES = ["PENDING", "SENT", "FAILED"] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
+export const ARTIFACT_KINDS = ["PDF"] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+export const ARTIFACT_STATUSES = ["GENERATING", "READY", "FAILED"] as const;
+export type ArtifactStatus = (typeof ARTIFACT_STATUSES)[number];
+
 export const ROSTER_STATUSES = ["ON_DUTY", "ANNUAL_LEAVE"] as const;
 export type RosterStatus = (typeof ROSTER_STATUSES)[number];
 

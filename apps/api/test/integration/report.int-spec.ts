@@ -49,6 +49,7 @@ describe("reports (integration)", () => {
 
   beforeEach(async () => {
     await resetAuthData(prisma);
+    await prisma.reportArtifact.deleteMany();
     await prisma.reportEvidence.deleteMany();
     await prisma.report.deleteMany();
     await prisma.evidence.deleteMany();
@@ -209,12 +210,13 @@ describe("reports (integration)", () => {
       data: {
         wardId,
         workDate: new Date(`${workDate}T00:00:00.000Z`),
-        activity: "Drainage desilting",
-        location: "Makina Market area",
-        description: "Desilted open drains along the market",
-        staffCount: 4,
-        challenges: "Rain delayed progress",
-        status: "APPROVED",
+        activity: (overrides.activity as string) ?? "Drainage desilting",
+        location: (overrides.location as string) ?? "Makina Market area",
+        description: (overrides.description as string) ?? "Desilted open drains along the market",
+        staffCount: Number(overrides.staffCount ?? 4),
+        challenges: (overrides.challenges as string) ?? "Rain delayed progress",
+        suggestedSolutions: (overrides.suggestedSolutions as string) ?? null,
+        status: (overrides.status as "APPROVED" | "SUBMITTED") ?? "APPROVED",
         submittedBy: "test",
         reviewedBy: "test",
         detail: {
@@ -864,14 +866,15 @@ describe("reports (integration)", () => {
   });
 
   it("returns SQL pagination totals in compatible report-list headers", async () => {
-    const payload = {
-      scopeType: "WARD",
-      scopeId: makinaWard.id,
-      startDate: MONDAY,
-      endDate: MONDAY,
-      kind: "DAILY",
-    };
+    const dates = [MONDAY, TUESDAY];
     for (let index = 0; index < 2; index += 1) {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: dates[index],
+        endDate: dates[index],
+        kind: "DAILY",
+      };
       const finalized = await api(app, {
         method: "POST",
         url: "/api/v1/reports",
@@ -1078,5 +1081,247 @@ describe("reports (integration)", () => {
       cookie: reviewer.cookie,
     });
     expect(valid.statusCode).toBe(200);
+  });
+
+  // -- Authoritative PDF & Duplicate Protection -------------------------------
+
+  describe("authoritative PDF reports and duplicate-finalization protection", () => {
+    it("rejects duplicate finalization for the same scope, kind, and period with 409 Conflict", async () => {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: MONDAY,
+        endDate: MONDAY,
+        kind: "DAILY",
+      };
+
+      // First finalization succeeds
+      const first = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload,
+      });
+      expect(first.statusCode).toBe(201);
+      const firstReport = first.json() as Record<string, any>;
+      expect(firstReport.id).toBeDefined();
+
+      // Second finalization attempt must be rejected with 409 Conflict
+      const duplicate = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload,
+      });
+      expect(duplicate.statusCode).toBe(409);
+      const errBody = duplicate.json() as Record<string, any>;
+      const message = errBody.message || errBody.error?.message;
+      expect(message).toBe(
+        "Report already generated. The report for this scope and reporting period is already available in Report History.",
+      );
+      const existingReportId = errBody.existingReportId || errBody.error?.existingReportId;
+      expect(existingReportId).toBe(firstReport.id);
+    });
+
+    it("prevents concurrent finalization race conditions", async () => {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: TUESDAY,
+        endDate: TUESDAY,
+        kind: "DAILY",
+      };
+
+      const [res1, res2] = await Promise.all([
+        api(app, {
+          method: "POST",
+          url: "/api/v1/reports",
+          cookie: reviewer.cookie,
+          csrf: reviewer.csrf,
+          payload,
+        }),
+        api(app, {
+          method: "POST",
+          url: "/api/v1/reports",
+          cookie: reviewer.cookie,
+          csrf: reviewer.csrf,
+          payload,
+        }),
+      ]);
+
+      const statuses = [res1.statusCode, res2.statusCode].sort();
+      expect(statuses).toEqual([201, 409]);
+    });
+
+    it("generates and delivers official PDF artifact with inline and attachment disposition", async () => {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: MONDAY,
+        endDate: MONDAY,
+        kind: "DAILY",
+      };
+
+      const finalized = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload,
+      });
+      expect(finalized.statusCode).toBe(201);
+      const report = finalized.json() as Record<string, any>;
+
+      // GET PDF inline
+      const pdfInline = await api(app, {
+        method: "GET",
+        url: `/api/v1/reports/${report.id}/pdf`,
+        cookie: reviewer.cookie,
+      });
+      expect(pdfInline.statusCode).toBe(200);
+      expect(pdfInline.headers["content-type"]).toBe("application/pdf");
+      expect(pdfInline.headers["cache-control"]).toBe("private, no-store");
+      expect(pdfInline.headers["content-disposition"]).toContain("inline");
+      expect(pdfInline.headers["content-disposition"]).toContain(".pdf");
+      expect(pdfInline.rawPayload.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+
+      // GET PDF attachment
+      const pdfAttach = await api(app, {
+        method: "GET",
+        url: `/api/v1/reports/${report.id}/pdf?disposition=attachment`,
+        cookie: reviewer.cookie,
+      });
+      expect(pdfAttach.statusCode).toBe(200);
+      expect(pdfAttach.headers["content-disposition"]).toContain("attachment");
+      expect(pdfAttach.rawPayload.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    });
+
+    it("performs self-repair if PDF artifact is missing or damaged in storage", async () => {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: MONDAY,
+        endDate: MONDAY,
+        kind: "DAILY",
+      };
+
+      const finalized = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload,
+      });
+      const report = finalized.json() as Record<string, any>;
+
+      // Intentionally damage the artifact record to simulate storage loss
+      await prisma.reportArtifact.updateMany({
+        where: { reportId: report.id },
+        data: { objectKey: "0".repeat(48), status: "FAILED", failureReason: "Simulated loss" },
+      });
+
+      // Requesting PDF triggers atomic self-repair
+      const repairedPdf = await api(app, {
+        method: "GET",
+        url: `/api/v1/reports/${report.id}/pdf`,
+        cookie: reviewer.cookie,
+      });
+      expect(repairedPdf.statusCode).toBe(200);
+      expect(repairedPdf.rawPayload.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+
+      const artifact = await prisma.reportArtifact.findFirst({
+        where: { reportId: report.id },
+      });
+      expect(artifact?.status).toBe("READY");
+      expect(artifact?.sha256).toBeDefined();
+      expect(artifact?.size).toBeGreaterThan(1000);
+    });
+
+    it("enforces scope isolation on the PDF endpoint", async () => {
+      const payload = {
+        scopeType: "WARD",
+        scopeId: makinaWard.id,
+        startDate: MONDAY,
+        endDate: MONDAY,
+        kind: "DAILY",
+      };
+
+      const finalized = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload,
+      });
+      const report = finalized.json() as Record<string, any>;
+
+      const denied = await api(app, {
+        method: "GET",
+        url: `/api/v1/reports/${report.id}/pdf`,
+        cookie: foreignOfficer.cookie,
+      });
+      expect(denied.statusCode).toBe(404);
+    });
+
+    it("freezes complete daily attendance register with designation and retains full work-log narrations", async () => {
+      const empId = await createEmployee("20250100999", "Amina Hussein", makinaWard.id, "Ward Supervisor");
+      const session = await createSession(makinaWard.id, MONDAY, "Market clean-up", "Makina Market");
+      await createAttendance(empId, session.id, makinaWard.id, MONDAY, "PRESENT");
+
+      await createApprovedWorkLog(makinaWard.id, MONDAY, {
+        description: "Full field narration: Cleared 300m of perimeter drainage around the central stalls.",
+        staffCount: 8,
+        numberOfTrips: 4,
+        challenges: "Severe silt buildup",
+        suggestedSolutions: "Schedule bi-weekly flushing during dry spell",
+        completionStatus: "COMPLETE",
+      });
+
+      const finalized = await api(app, {
+        method: "POST",
+        url: "/api/v1/reports",
+        cookie: reviewer.cookie,
+        csrf: reviewer.csrf,
+        payload: {
+          scopeType: "WARD",
+          scopeId: makinaWard.id,
+          startDate: MONDAY,
+          endDate: MONDAY,
+          kind: "DAILY",
+        },
+      });
+      expect(finalized.statusCode).toBe(201);
+      const report = finalized.json() as Record<string, any>;
+      const snapshot = report.snapshot as Record<string, any>;
+
+      // Complete attendance roster verification
+      const day = snapshot.days[0];
+      expect(day.date).toBe(MONDAY);
+      const wardRoster = day.wards[0];
+      expect(wardRoster.wardName).toBe("Makina");
+      expect(wardRoster.activity).toBe("Market clean-up");
+      expect(wardRoster.location).toBe("Makina Market");
+
+      const rosterEntry = wardRoster.roster.find((r: any) => r.employeeNumber === "20250100999");
+      expect(rosterEntry).toBeDefined();
+      expect(rosterEntry.fullName).toBe("Amina Hussein");
+      expect(rosterEntry.designation).toBe("Ward Supervisor");
+      expect(rosterEntry.status).toBe("PRESENT");
+      expect(rosterEntry.workDate).toBe(MONDAY);
+      expect(rosterEntry.wardName).toBe("Makina");
+
+      // Complete work log verification
+      expect(snapshot.workLogs).toHaveLength(1);
+      const workLog = snapshot.workLogs[0];
+      expect(workLog.description).toBe(
+        "Full field narration: Cleared 300m of perimeter drainage around the central stalls.",
+      );
+      expect(workLog.staffCount).toBe(8);
+      expect(workLog.numberOfTrips).toBe(4);
+      expect(workLog.challenges).toBe("Severe silt buildup");
+      expect(workLog.completionStatus).toBe("COMPLETE");
+    });
   });
 });

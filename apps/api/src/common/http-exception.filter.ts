@@ -35,6 +35,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let code = "INTERNAL_ERROR";
     let message = "An unexpected error occurred.";
     let details: Record<string, unknown> | undefined;
+    let extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -56,6 +57,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         if (body["details"]) {
           details = body["details"] as Record<string, unknown>;
         }
+        extra = Object.fromEntries(
+          Object.entries(body).filter(
+            ([key]) => !["message", "code", "statusCode", "error", "details"].includes(key),
+          ),
+        );
       }
     } else if (exception instanceof ZodError) {
       status = HttpStatus.UNPROCESSABLE_ENTITY;
@@ -79,7 +85,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code,
         message,
         ...(details ? { details } : {}),
+        ...extra,
       },
+      ...extra,
     });
   }
 }

@@ -35,12 +35,25 @@ export function setCsrfToken(token: string | null): void {
 }
 
 export class ApiError extends Error {
+  public readonly existingReportId?: string;
+
   constructor(
     public readonly status: number,
     public readonly code: string,
     message: string,
+    public readonly details?: Record<string, unknown> | null,
   ) {
     super(message);
+    if (details?.existingReportId && typeof details.existingReportId === "string") {
+      this.existingReportId = details.existingReportId;
+    } else if (
+      details?.error &&
+      typeof details.error === "object" &&
+      "existingReportId" in (details.error as Record<string, unknown>) &&
+      typeof (details.error as Record<string, unknown>).existingReportId === "string"
+    ) {
+      this.existingReportId = (details.error as Record<string, unknown>).existingReportId as string;
+    }
   }
 }
 
@@ -80,8 +93,9 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      body?.error?.code ?? "REQUEST_FAILED",
-      body?.error?.message ?? "Request failed",
+      body?.error?.code ?? body?.code ?? "REQUEST_FAILED",
+      body?.error?.message ?? body?.message ?? "Request failed",
+      body,
     );
   }
   return body as T;
@@ -981,6 +995,7 @@ export interface ReportPhotoRef {
 export interface ReportRosterRow {
   employeeNumber: string;
   fullName: string;
+  designation?: string | null;
   role: string | null;
   status: string;
   detail: string;
@@ -1017,6 +1032,7 @@ export interface ReportWorkLog {
   climateTeamCount: number;
   staffCount: number;
   challenges: string | null;
+  suggestedSolutions?: string | null;
   completionStatus: string;
   outstandingWork: string | null;
   photos: ReportPhotoRef[];
@@ -1193,6 +1209,25 @@ export async function downloadReportEvidence(accessPath: string): Promise<Blob> 
 
 export async function downloadReportCsv(id: string): Promise<Blob> {
   const response = await fetch(`${API_URL}/reports/${encodeURIComponent(id)}/csv`, {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(
+      response.status,
+      body?.error?.code ?? "REQUEST_FAILED",
+      body?.error?.message ?? "Request failed",
+    );
+  }
+  return response.blob();
+}
+
+export function reportPdfUrl(id: string, disposition: "inline" | "attachment" = "inline"): string {
+  return `${API_URL}/reports/${encodeURIComponent(id)}/pdf?disposition=${disposition}`;
+}
+
+export async function downloadReportPdf(id: string): Promise<Blob> {
+  const response = await fetch(reportPdfUrl(id, "attachment"), {
     credentials: "include",
   });
   if (!response.ok) {

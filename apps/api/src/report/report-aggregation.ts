@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   AttendanceStatus,
   CompletionStatus,
@@ -14,6 +15,9 @@ import { ATTENDANCE_STATUSES } from "@ward-ops/contracts";
 // ---------------------------------------------------------------------------
 
 export const MAX_REPORT_SPAN_DAYS = 366;
+export const SNAPSHOT_VERSION = 2;
+export const ANALYTICS_VERSION = "1.0";
+export const RENDERER_VERSION = "1.0";
 
 export interface ReportPhotoRef {
   evidenceId: string;
@@ -21,14 +25,24 @@ export interface ReportPhotoRef {
   sha256: string;
   caption: string | null;
   stage: EvidenceStage;
+  workLogId?: string;
+  wardName?: string;
+  activity?: string;
+  date?: string;
+  accessPath?: string;
 }
 
 export interface ReportRosterRow {
   employeeNumber: string;
   fullName: string;
-  role: string | null;
+  designation: string | null;
+  role: string | null; // backward-compatible alias
   status: AttendanceStatus;
   detail: string;
+  wardName?: string;
+  workDate?: string;
+  sessionActivity?: string;
+  sessionLocation?: string;
 }
 
 export interface ReportDayWard {
@@ -62,12 +76,108 @@ export interface ReportWorkLog {
   climateTeamCount: number;
   staffCount: number;
   challenges: string | null;
+  suggestedSolutions: string | null;
   completionStatus: CompletionStatus;
   outstandingWork: string | null;
   photos: ReportPhotoRef[];
 }
 
+export interface AttendanceStatusBreakdown {
+  count: number;
+  percentage: number;
+}
+
+export interface DailyAttendanceTrend {
+  date: string;
+  present: number;
+  late: number;
+  absent: number;
+  other: number;
+  total: number;
+  effectiveRate: number;
+}
+
+export interface ActivityOutputSummary {
+  activity: string;
+  count: number;
+  staffAllocations: number;
+  trips: number;
+  complete: number;
+  incomplete: number;
+}
+
+export interface OperationsMetrics {
+  wasteTransferLogsCount: number;
+  cleanupLogsCount: number;
+  climateTeamTotal: number;
+  trucksUsed: string[];
+  backhoesUsed: string[];
+}
+
+export interface ConstituentComparison {
+  id: string;
+  name: string;
+  attendanceRate: number;
+  workLogsCount: number;
+  tripsCount: number;
+  completionRate: number;
+  staffAllocations: number;
+}
+
+export interface ReportAnalytics {
+  analyticsVersion: string;
+  totalRostered: number;
+  expectedOnDuty: number;
+  excusedCount: number;
+  attendedCount: number;
+  effectiveAttendanceRate: number;
+  operationalAvailabilityRate: number;
+  uniquePersonnelAttended: number;
+  totalStaffAllocations: number;
+  statusDistribution: Record<AttendanceStatus, AttendanceStatusBreakdown>;
+  dailyTrend: DailyAttendanceTrend[];
+  totalWorkLogs: number;
+  distinctActivitiesCount: number;
+  totalTrips: number;
+  completeCount: number;
+  incompleteCount: number;
+  completionRate: number;
+  outstandingWorkCount: number;
+  activityBreakdown: ActivityOutputSummary[];
+  operations: OperationsMetrics;
+  constituentComparisons: ConstituentComparison[];
+}
+
+export interface ComparableKpi {
+  current: number;
+  previous: number;
+  absoluteChange: number;
+  percentageChange: number | null;
+}
+
+export interface ReportComparison {
+  previousStartDate: string;
+  previousEndDate: string;
+  comparisonKind: string;
+  kpis: {
+    attendedCount: ComparableKpi;
+    effectiveAttendanceRate: ComparableKpi;
+    absentCount: ComparableKpi;
+    totalWorkLogs: ComparableKpi;
+    totalTrips: ComparableKpi;
+    totalStaffAllocations: ComparableKpi;
+    completionRate: ComparableKpi;
+  };
+}
+
+export interface PreviousPeriodResult {
+  startDate: string;
+  endDate: string;
+  label: string;
+}
+
 export interface ReportSnapshot {
+  snapshotVersion: number;
   scopeType: ScopeType;
   scopeId: string;
   scopeName: string;
@@ -78,8 +188,14 @@ export interface ReportSnapshot {
   signedBy: string | null;
   signedTitle: string | null;
   totals: Record<AttendanceStatus, number>;
+  analytics: ReportAnalytics;
+  comparison: ReportComparison | null;
   days: ReportDay[];
   workLogs: ReportWorkLog[];
+  evidence: ReportPhotoRef[];
+  narrative?: string | null;
+  recommendations?: string | null;
+  snapshotSha256?: string;
 }
 
 export function toDateOnly(value: Date): string {
@@ -88,6 +204,11 @@ export function toDateOnly(value: Date): string {
 
 export function fromDateString(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
+}
+
+export function roundTo(value: number, decimals = 1): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
 }
 
 /** Date-only, UTC-based iterator over [start, end] inclusive. */
@@ -176,6 +297,19 @@ export function samplePeriodPhotos(
   return photos.filter((photo) => selectedIds.has(photo.evidenceId));
 }
 
+export function deduplicateEvidence(photos: ReportPhotoRef[]): ReportPhotoRef[] {
+  const seen = new Set<string>();
+  const result: ReportPhotoRef[] = [];
+  for (const photo of photos) {
+    const key = photo.objectKey || photo.evidenceId;
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      result.push(photo);
+    }
+  }
+  return result;
+}
+
 export function emptyTotals(): Record<AttendanceStatus, number> {
   const totals = {} as Record<AttendanceStatus, number>;
   for (const status of ATTENDANCE_STATUSES) totals[status] = 0;
@@ -228,6 +362,388 @@ export function escapeCsvCell(value: unknown): string {
   if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   if (/[",\n\r]/.test(text)) text = `"${text.replace(/"/g, '""')}"`;
   return text;
+}
+
+// ---------------------------------------------------------------------------
+// Authoritative Deterministic Analytics (§6, §8, §9)
+// ---------------------------------------------------------------------------
+
+export function computeReportAnalytics(
+  totals: Record<AttendanceStatus, number>,
+  days: ReportDay[],
+  workLogs: ReportWorkLog[],
+  constituentWards: Array<{ id: string; name: string }> = [],
+): ReportAnalytics {
+  let totalRostered = 0;
+  for (const status of ATTENDANCE_STATUSES) {
+    totalRostered += totals[status] ?? 0;
+  }
+
+  const expectedOnDuty = (totals.PRESENT ?? 0) + (totals.LATE ?? 0) + (totals.ABSENT ?? 0);
+  const excusedCount =
+    (totals.OFF_DUTY ?? 0) +
+    (totals.LEAVE ?? 0) +
+    (totals.SICK_OFF ?? 0) +
+    (totals.OFFICIAL_DUTY ?? 0);
+  const attendedCount = (totals.PRESENT ?? 0) + (totals.LATE ?? 0);
+
+  const effectiveAttendanceRate =
+    expectedOnDuty > 0 ? roundTo((attendedCount / expectedOnDuty) * 100, 1) : 0;
+  const operationalAvailabilityRate =
+    totalRostered > 0
+      ? roundTo(((attendedCount + (totals.OFFICIAL_DUTY ?? 0)) / totalRostered) * 100, 1)
+      : 0;
+
+  // Unique human workforce personnel who attended duty during this reporting period.
+  const uniquePersonnelSet = new Set<string>();
+  for (const day of days) {
+    for (const ward of day.wards) {
+      for (const row of ward.roster) {
+        if (row.status === "PRESENT" || row.status === "LATE" || row.status === "OFFICIAL_DUTY") {
+          uniquePersonnelSet.add(row.employeeNumber);
+        }
+      }
+    }
+  }
+  const uniquePersonnelAttended = uniquePersonnelSet.size;
+
+  // Sum of staff counts across all work logs (represents task allocations, not distinct humans).
+  const totalStaffAllocations = workLogs.reduce((acc, log) => acc + (log.staffCount || 0), 0);
+
+  // 7-status distribution breakdown
+  const statusDistribution = {} as Record<AttendanceStatus, AttendanceStatusBreakdown>;
+  for (const status of ATTENDANCE_STATUSES) {
+    const count = totals[status] ?? 0;
+    const percentage = totalRostered > 0 ? roundTo((count / totalRostered) * 100, 1) : 0;
+    statusDistribution[status] = { count, percentage };
+  }
+
+  // Daily attendance trends
+  const dailyTrend: DailyAttendanceTrend[] = days.map((day) => {
+    let dayPresent = 0;
+    let dayLate = 0;
+    let dayAbsent = 0;
+    let dayOther = 0;
+    let dayTotal = 0;
+
+    for (const ward of day.wards) {
+      for (const row of ward.roster) {
+        dayTotal += 1;
+        if (row.status === "PRESENT") dayPresent += 1;
+        else if (row.status === "LATE") dayLate += 1;
+        else if (row.status === "ABSENT") dayAbsent += 1;
+        else dayOther += 1;
+      }
+    }
+
+    const dayExpected = dayPresent + dayLate + dayAbsent;
+    const dayEffectiveRate =
+      dayExpected > 0 ? roundTo(((dayPresent + dayLate) / dayExpected) * 100, 1) : 0;
+
+    return {
+      date: day.date,
+      present: dayPresent,
+      late: dayLate,
+      absent: dayAbsent,
+      other: dayOther,
+      total: dayTotal,
+      effectiveRate: dayEffectiveRate,
+    };
+  });
+
+  // Work log operations metrics
+  const totalWorkLogs = workLogs.length;
+  const distinctActivities = new Set(workLogs.map((item) => item.activity.trim()));
+  const totalTrips = workLogs.reduce((acc, item) => acc + (item.numberOfTrips || 0), 0);
+  const completeCount = workLogs.filter((item) => item.completionStatus === "COMPLETE").length;
+  const incompleteCount = workLogs.filter((item) => item.completionStatus === "INCOMPLETE").length;
+  const completionRate =
+    totalWorkLogs > 0 ? roundTo((completeCount / totalWorkLogs) * 100, 1) : 0;
+  const outstandingWorkCount = workLogs.filter(
+    (item) => item.outstandingWork != null && item.outstandingWork.trim().length > 0,
+  ).length;
+
+  // Activity breakdown
+  const activityMap = new Map<
+    string,
+    { count: number; staffAllocations: number; trips: number; complete: number; incomplete: number }
+  >();
+  for (const log of workLogs) {
+    const act = log.activity.trim();
+    const curr = activityMap.get(act) ?? {
+      count: 0,
+      staffAllocations: 0,
+      trips: 0,
+      complete: 0,
+      incomplete: 0,
+    };
+    curr.count += 1;
+    curr.staffAllocations += log.staffCount || 0;
+    curr.trips += log.numberOfTrips || 0;
+    if (log.completionStatus === "COMPLETE") curr.complete += 1;
+    else curr.incomplete += 1;
+    activityMap.set(act, curr);
+  }
+
+  const activityBreakdown: ActivityOutputSummary[] = [...activityMap.entries()]
+    .map(([activity, data]) => ({ activity, ...data }))
+    .sort((a, b) => a.activity.localeCompare(b.activity));
+
+  // Equipment and operations
+  let wasteTransferLogsCount = 0;
+  let cleanupLogsCount = 0;
+  let climateTeamTotal = 0;
+  const trucksSet = new Set<string>();
+  const backhoesSet = new Set<string>();
+
+  for (const log of workLogs) {
+    if (log.wasteTransferInvolved) wasteTransferLogsCount += 1;
+    if (log.cleanupDone) cleanupLogsCount += 1;
+    climateTeamTotal += log.climateTeamCount || 0;
+    if (log.truckId?.trim()) trucksSet.add(log.truckId.trim());
+    if (log.backhoeId?.trim()) backhoesSet.add(log.backhoeId.trim());
+  }
+
+  const operations: OperationsMetrics = {
+    wasteTransferLogsCount,
+    cleanupLogsCount,
+    climateTeamTotal,
+    trucksUsed: [...trucksSet].sort(),
+    backhoesUsed: [...backhoesSet].sort(),
+  };
+
+  // Constituent comparisons (wards in subcounty/county)
+  const constituentComparisons: ConstituentComparison[] = constituentWards.map((w) => {
+    let wardPresent = 0;
+    let wardLate = 0;
+    let wardAbsent = 0;
+    for (const day of days) {
+      const match = day.wards.find((item) => item.wardId === w.id);
+      if (match) {
+        for (const row of match.roster) {
+          if (row.status === "PRESENT") wardPresent += 1;
+          else if (row.status === "LATE") wardLate += 1;
+          else if (row.status === "ABSENT") wardAbsent += 1;
+        }
+      }
+    }
+    const wardExpected = wardPresent + wardLate + wardAbsent;
+    const wardAttendanceRate =
+      wardExpected > 0 ? roundTo(((wardPresent + wardLate) / wardExpected) * 100, 1) : 0;
+
+    const wardLogs = workLogs.filter((item) => item.wardId === w.id);
+    const wardWorkLogsCount = wardLogs.length;
+    const wardTripsCount = wardLogs.reduce((acc, item) => acc + (item.numberOfTrips || 0), 0);
+    const wardStaffAllocations = wardLogs.reduce((acc, item) => acc + (item.staffCount || 0), 0);
+    const wardCompleteCount = wardLogs.filter((item) => item.completionStatus === "COMPLETE").length;
+    const wardCompletionRate =
+      wardWorkLogsCount > 0 ? roundTo((wardCompleteCount / wardWorkLogsCount) * 100, 1) : 0;
+
+    return {
+      id: w.id,
+      name: w.name,
+      attendanceRate: wardAttendanceRate,
+      workLogsCount: wardWorkLogsCount,
+      tripsCount: wardTripsCount,
+      completionRate: wardCompletionRate,
+      staffAllocations: wardStaffAllocations,
+    };
+  });
+
+  return {
+    analyticsVersion: ANALYTICS_VERSION,
+    totalRostered,
+    expectedOnDuty,
+    excusedCount,
+    attendedCount,
+    effectiveAttendanceRate,
+    operationalAvailabilityRate,
+    uniquePersonnelAttended,
+    totalStaffAllocations,
+    statusDistribution,
+    dailyTrend,
+    totalWorkLogs,
+    distinctActivitiesCount: distinctActivities.size,
+    totalTrips,
+    completeCount,
+    incompleteCount,
+    completionRate,
+    outstandingWorkCount,
+    activityBreakdown,
+    operations,
+    constituentComparisons,
+  };
+}
+
+export function compareKpis(current: number, previous: number, roundDecimals = 1): ComparableKpi {
+  const absoluteChange = roundTo(current - previous, roundDecimals);
+  let percentageChange: number | null = null;
+  if (previous > 0) {
+    percentageChange = roundTo(((current - previous) / previous) * 100, 1);
+  } else if (current > 0) {
+    percentageChange = 100.0;
+  } else {
+    percentageChange = 0.0;
+  }
+  return { current, previous, absoluteChange, percentageChange };
+}
+
+export function calculatePreviousPeriod(
+  startDate: string,
+  endDate: string,
+  kind: ReportKind,
+  availableSessionDates: string[] = [],
+): PreviousPeriodResult {
+  const start = fromDateString(startDate);
+  const end = fromDateString(endDate);
+
+  if (kind === "DAILY") {
+    // Look back up to 7 days for the most recent day with an attendance session in scope.
+    if (availableSessionDates.length > 0) {
+      const candidateDates = availableSessionDates
+        .filter((d) => d < startDate)
+        .sort()
+        .reverse();
+      const minLookback = new Date(start);
+      minLookback.setUTCDate(minLookback.getUTCDate() - 7);
+      const minLookbackStr = toDateOnly(minLookback);
+
+      const recentSessionDate = candidateDates.find((d) => d >= minLookbackStr);
+      if (recentSessionDate) {
+        return {
+          startDate: recentSessionDate,
+          endDate: recentSessionDate,
+          label: `Previous operational reporting day (${recentSessionDate})`,
+        };
+      }
+    }
+
+    // Default fallback: immediately preceding calendar day
+    const prevDay = new Date(start);
+    prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+    const prevDayStr = toDateOnly(prevDay);
+    return {
+      startDate: prevDayStr,
+      endDate: prevDayStr,
+      label: "Previous calendar day",
+    };
+  }
+
+  if (kind === "WEEKLY") {
+    const prevStart = new Date(start);
+    prevStart.setUTCDate(prevStart.getUTCDate() - 7);
+    const prevEnd = new Date(end);
+    prevEnd.setUTCDate(prevEnd.getUTCDate() - 7);
+    return {
+      startDate: toDateOnly(prevStart),
+      endDate: toDateOnly(prevEnd),
+      label: "Previous week",
+    };
+  }
+
+  if (kind === "MONTHLY") {
+    // Check if start is 1st of month and end is last day of that same month
+    const isFirstOfMonth = start.getUTCDate() === 1;
+    const testNextDay = new Date(end);
+    testNextDay.setUTCDate(testNextDay.getUTCDate() + 1);
+    const isEndOfMonth = testNextDay.getUTCDate() === 1;
+
+    if (isFirstOfMonth && isEndOfMonth && start.getUTCMonth() === end.getUTCMonth()) {
+      // Full calendar month -> preceding full calendar month
+      const prevStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+      const prevEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 0));
+      return {
+        startDate: toDateOnly(prevStart),
+        endDate: toDateOnly(prevEnd),
+        label: "Previous month",
+      };
+    }
+
+    // Non-standard span: shift by duration D
+    const durationDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    const prevEnd = new Date(start);
+    prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setUTCDate(prevStart.getUTCDate() - durationDays + 1);
+    return {
+      startDate: toDateOnly(prevStart),
+      endDate: toDateOnly(prevEnd),
+      label: "Previous month",
+    };
+  }
+
+  // CUSTOM: equal preceding span
+  const durationDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  const prevEnd = new Date(start);
+  prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setUTCDate(prevStart.getUTCDate() - durationDays + 1);
+  return {
+    startDate: toDateOnly(prevStart),
+    endDate: toDateOnly(prevEnd),
+    label: "Preceding equal period",
+  };
+}
+
+export function computeReportComparison(
+  current: ReportAnalytics,
+  previous: ReportAnalytics,
+  previousStartDate: string,
+  previousEndDate: string,
+  comparisonKind: string,
+): ReportComparison {
+  return {
+    previousStartDate,
+    previousEndDate,
+    comparisonKind,
+    kpis: {
+      attendedCount: compareKpis(current.attendedCount, previous.attendedCount, 0),
+      effectiveAttendanceRate: compareKpis(
+        current.effectiveAttendanceRate,
+        previous.effectiveAttendanceRate,
+        1,
+      ),
+      absentCount: compareKpis(
+        current.statusDistribution.ABSENT?.count ?? 0,
+        previous.statusDistribution.ABSENT?.count ?? 0,
+        0,
+      ),
+      totalWorkLogs: compareKpis(current.totalWorkLogs, previous.totalWorkLogs, 0),
+      totalTrips: compareKpis(current.totalTrips, previous.totalTrips, 0),
+      totalStaffAllocations: compareKpis(
+        current.totalStaffAllocations,
+        previous.totalStaffAllocations,
+        0,
+      ),
+      completionRate: compareKpis(current.completionRate, previous.completionRate, 1),
+    },
+  };
+}
+
+/**
+ * Deterministic canonical SHA-256 hash of a ReportSnapshot.
+ * Recursively key-sorted, excluding the snapshotSha256 property itself.
+ */
+export function canonicalSnapshotHash(snapshot: unknown): string {
+  function sortObjectKeys(val: unknown): unknown {
+    if (Array.isArray(val)) {
+      return val.map(sortObjectKeys);
+    }
+    if (val !== null && typeof val === "object" && !(val instanceof Date)) {
+      const obj = val as Record<string, unknown>;
+      const sortedKeys = Object.keys(obj)
+        .filter((k) => k !== "snapshotSha256")
+        .sort();
+      const res: Record<string, unknown> = {};
+      for (const key of sortedKeys) {
+        res[key] = sortObjectKeys(obj[key]);
+      }
+      return res;
+    }
+    return val;
+  }
+  const canonicalJson = JSON.stringify(sortObjectKeys(snapshot));
+  return createHash("sha256").update(canonicalJson, "utf8").digest("hex");
 }
 
 // ---------------------------------------------------------------------------

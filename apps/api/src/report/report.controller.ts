@@ -87,6 +87,23 @@ export class ReportController {
     return this.reports.get(auth!, id);
   }
 
+  @RequireCapability("REPORTS_READ")
+  @Header("Cache-Control", "private, no-store")
+  @Get(":id/pdf")
+  async pdf(
+    @Param("id") id: string,
+    @Query("disposition") disposition: string | undefined,
+    @CurrentUser() auth: AuthContext | undefined,
+    @Req() request: FastifyRequest,
+  ) {
+    const disp = disposition === "attachment" ? "attachment" : "inline";
+    const result = await this.reports.getPdf(auth!, id, disp, meta(request));
+    return new StreamableFile(result.buffer, {
+      type: "application/pdf",
+      disposition: `${disp}; filename="${result.filename}"`,
+    });
+  }
+
   @RequireCapability("REPORTS_EXPORT")
   @Get(":id/csv")
   async csv(

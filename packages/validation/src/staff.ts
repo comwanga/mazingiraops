@@ -19,7 +19,7 @@ export const createEmployeeSchema = z.object({
 });
 
 export const updateEmployeeSchema = createEmployeeSchema
-  .omit({ wardId: true, employeeNumber: true })
+  .omit({ wardId: true })
   .partial();
 
 export const createEmployeeAssignmentSchema = z.object({

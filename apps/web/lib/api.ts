@@ -417,7 +417,7 @@ export async function createStaff(input: CreateEmployeeInput): Promise<Employee>
 }
 
 export type UpdateEmployeeInput = Partial<
-  Pick<CreateEmployeeInput, "fullName" | "phone" | "designation">
+  Pick<CreateEmployeeInput, "employeeNumber" | "fullName" | "phone" | "designation">
 > & {
   email?: string | null;
   residence?: string | null;

@@ -892,6 +892,7 @@ function uploadWithProgress<T>(
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
     xhr.withCredentials = true;
+    xhr.timeout = 180000;
     if (csrfToken) xhr.setRequestHeader("x-csrf-token", csrfToken);
     if (onProgress) {
       xhr.upload.addEventListener("progress", (event) => {
@@ -915,14 +916,17 @@ function uploadWithProgress<T>(
       const errorBody = body as { error?: { code?: string; message?: string } } | null;
       reject(
         new ApiError(
-          xhr.status,
-          errorBody?.error?.code ?? "REQUEST_FAILED",
-          errorBody?.error?.message ?? "Request failed",
+          xhr.status || 500,
+          errorBody?.error?.code ?? (xhr.status === 413 ? "PAYLOAD_TOO_LARGE" : "REQUEST_FAILED"),
+          errorBody?.error?.message ?? (xhr.status === 413 ? "Photo exceeds maximum upload size" : "Request failed"),
         ),
       );
     });
     xhr.addEventListener("error", () => {
       reject(new ApiError(0, "REQUEST_FAILED", "Network error during upload"));
+    });
+    xhr.addEventListener("timeout", () => {
+      reject(new ApiError(0, "REQUEST_TIMEOUT", "Upload timed out. Check your connection and try again."));
     });
     xhr.send(form);
   });

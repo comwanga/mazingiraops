@@ -6,7 +6,6 @@ import {
   aiNarrative,
   calculatePreviousPeriod,
   canonicalSnapshotHash,
-  compareKpis,
   computeReportAnalytics,
   computeReportComparison,
   deduplicateEvidence,

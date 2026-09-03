@@ -2,12 +2,8 @@ import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import type { AttendanceStatus } from "@ward-ops/contracts";
 import type {
-  ReportAnalytics,
-  ReportComparison,
-  ReportDay,
   ReportPhotoRef,
   ReportSnapshot,
-  ReportWorkLog,
 } from "../report-aggregation";
 import { canonicalSnapshotHash, RENDERER_VERSION } from "../report-aggregation";
 

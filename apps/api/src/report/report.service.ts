@@ -724,7 +724,7 @@ export class ReportService {
     snapshot: ReportSnapshot,
   ): Promise<void> {
     // 1. Record GENERATING state
-    let artifact = await this.prisma.client.reportArtifact.upsert({
+    const artifact = await this.prisma.client.reportArtifact.upsert({
       where: {
         reportId_kind: {
           reportId: report.id,
@@ -914,7 +914,7 @@ export class ReportService {
     const snapshot = report.snapshot as unknown as ReportSnapshot;
     const filename = `mazingira-${report.kind.toLowerCase()}-${toDateOnly(report.periodStart)}.pdf`;
 
-    let artifact = await this.prisma.client.reportArtifact.findUnique({
+    const artifact = await this.prisma.client.reportArtifact.findUnique({
       where: { reportId_kind: { reportId: report.id, kind: "PDF" } },
     });
 

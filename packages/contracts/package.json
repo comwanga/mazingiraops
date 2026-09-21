@@ -19,6 +19,6 @@
     "lint": "echo \"(lint runs from workspace root)\""
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^6.0.3"
   }
 }

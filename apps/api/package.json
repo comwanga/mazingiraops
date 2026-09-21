@@ -40,7 +40,7 @@
     "@nestjs/testing": "^11.2.1",
     "@types/nodemailer": "^8.0.1",
     "tsx": "^4.23.13",
-    "typescript": "^5.7.2",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }
 }
